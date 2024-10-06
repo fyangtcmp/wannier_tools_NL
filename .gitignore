@@ -1,0 +1,9 @@
+*~
+*/*.o
+*/*.mod
+*/*~
+*/*/*~
+*/*/sigma*dat
+*/*/rho*dat
+benchmarks/
+src.zip
