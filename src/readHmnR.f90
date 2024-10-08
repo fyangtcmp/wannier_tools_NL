@@ -9,6 +9,7 @@ subroutine readNormalHmnR()
    ! License: GPL V3
 
    use para
+   use magnetic_moments
    !> in: N of wann
    !> out : nth atom
 
@@ -183,8 +184,9 @@ subroutine readNormalHmnR()
          endif
       endif
 
-      !> After considering the Zeeman field, we already extended the spin space to spin-full.
-      SOC = 1
+      if (include_m_spin) then
+         call add_zeeman_spin
+      endif
    endif ! Add_Zeeman_Field
 
 

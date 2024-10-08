@@ -1,5 +1,6 @@
 module magnetic_moments
-    use para, only: dp, zi, mu_B, eV2Hartree, Num_wann, Echarge, hbar, Bohr_radius, band_degeneracy_threshold
+    use para, only: dp, zi, mu_B, Echarge, hbar, Bohr_radius, eV2Hartree, band_degeneracy_threshold, &
+    Num_wann, Nrpts, irvec, HmnR, Bx, By, Bz
     implicit none
 
     !> Lande g-factor
@@ -8,7 +9,7 @@ module magnetic_moments
 
 contains
     subroutine spin_operators(M_S_oper)
-        !> extend the 2x2 pauli matrices to Num_wann x Num_wann, without unit
+        !> extend the 2x2 pauli matrices to Num_wann x Num_wann, without -hbar/2
 
         use para, only: Package
         implicit none
@@ -117,8 +118,8 @@ contains
                 call ZGEMM('N','N',  &
                 Num_wann,Num_wann,1, & ! m,n,k
                 1.0,                 & ! ALPHA
-                UU(:,l),Num_wann,    & ! matA, m
-                UU_dag(n,:),1,       & ! matB, k
+                UU(:,l:l),Num_wann,  & ! matA, m
+                UU_dag(n:n,:),1,     & ! matB, k
                 0.0,                 & ! BETA
                 Amat,Num_wann)         ! matC, m
 
@@ -128,7 +129,43 @@ contains
             enddo !n
         enddo !l
                 
-        M_L_oper = M_L_oper / mu_B
+        M_L_oper = M_L_oper / mu_B / Lande_g_L
         return
     end subroutine orbital_operators
+
+
+    subroutine add_zeeman_spin() !> be called in readHmnR.f90, subroutine readNormalHmnR
+        implicit none
+
+        integer :: ir
+        complex(dp), allocatable :: M_S_oper(:, :, :)
+        allocate( M_S_oper(Num_wann, Num_wann, 3) )
+        call spin_operators(M_S_oper)
+
+        do ir=1, Nrpts
+            if (irvec(1, ir)/=0.or.irvec(2, ir)/=0.or.irvec(3, ir)/=0) cycle
+            HmnR(:, :, ir) = HmnR(:, :, ir) + mu_B * (-0.5d0) * Lande_g_S *( M_S_oper(:,:,1)*Bx + M_S_oper(:,:,2)*By + M_S_oper(:,:,3)*Bz )
+        enddo ! ir
+    end subroutine
+
+
+    subroutine add_zeeman_orb(UU, W, velocities) !> be called in 
+        implicit none
+
+        complex(dp), intent(in)  :: UU(Num_wann, Num_wann)
+        real(dp),    intent(in)  :: W(Num_wann)
+        complex(dp), intent(in)  :: velocities(Num_wann, Num_wann,3)
+
+        integer :: ir
+        complex(dp), allocatable :: M_L_oper(:, :, :)
+        allocate( M_L_oper(Num_wann, Num_wann, 3) )
+
+        call orbital_operators(UU, W, velocities, M_L_oper) 
+
+        do ir=1, Nrpts
+            if (irvec(1, ir)/=0.or.irvec(2, ir)/=0.or.irvec(3, ir)/=0) cycle
+            HmnR(:, :, ir) = HmnR(:, :, ir) + mu_B * Lande_g_L *( M_L_oper(:,:,1)*Bx + M_L_oper(:,:,2)*By + M_L_oper(:,:,3)*Bz )
+        enddo ! ir
+
+    end subroutine
 end module

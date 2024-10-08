@@ -1,4 +1,5 @@
-OBJ =  module.o sparse.o wt_aux.o math_lib.o symmetry.o readHmnR.o inverse.o proteus.o \
+OBJ =  module.o magnetic_moments.o \
+       sparse.o wt_aux.o math_lib.o symmetry.o readHmnR.o inverse.o proteus.o \
        eigen.o ham_qlayer2qlayer.o psi.o unfolding.o rand.o \
   		 ham_slab.o ham_bulk.o ek_slab.o ek_bulk_polar.o ek_bulk.o \
        readinput.o fermisurface.o surfgreen.o surfstat.o \
@@ -8,10 +9,9 @@ OBJ =  module.o sparse.o wt_aux.o math_lib.o symmetry.o readHmnR.o inverse.o pro
   		 landau_level_sparse.o landau_level.o lanczos_sparse.o \
 		 berry.o wanniercenter_adaptive.o \
   		 effective_mass.o findnodes.o \
-		 sigma_OHE.o sigma.o magnetic_moments.o \
+		 sigma_OHE.o sigma.o Boltz_transport_anomalous.o \
                  NL_transport.o NL_transport_subs.o \
                  band_geo_distributions.o \
-                 Boltz_transport_anomalous.o \
 	main.o
 
 # compiler
@@ -24,7 +24,7 @@ FFLAG = $(OFLAG) $(WFLAG) -xHost
 LFLAG = $(OFLAG)
 
 # ARPACK LIBRARY
-ARPACK=/Users/quan/work/workplace/ARPACK/libarpack_MAC.a
+ARPACK=/usr/local/lib/libarpack.a
 
 # blas and lapack libraries
 # static linking

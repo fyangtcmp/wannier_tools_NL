@@ -1017,40 +1017,6 @@ contains
     end subroutine sigma_TRAHC_k    
 end module
 
-
-subroutine velocity_latticegauge_simple(k_in, UU, velocities) !> dH_dk, without 1/hbar
-    use para, only: dp, irvec, crvec, HmnR, pi2zi, ndegen, Nrpts, Num_wann, zi
-    implicit none
-
-    real(dp),    intent(in)  :: k_in(3)
-    complex(dp), intent(in)  :: UU(Num_wann, Num_wann)
-    complex(dp), intent(out) :: velocities(Num_wann, Num_wann, 3)
-
-    real(dp):: kdotr
-    integer :: iR
-    complex(dp), allocatable :: Amat(:, :), UU_dag(:,:)
-    allocate( Amat(Num_wann, Num_wann), UU_dag(Num_wann, Num_wann))
-
-    velocities= 0d0
-    do iR= 1, Nrpts
-        kdotr= k_in(1)*irvec(1,iR) + k_in(2)*irvec(2,iR) + k_in(3)*irvec(3,iR)
-        velocities(:,:,1)= velocities(:,:,1) + zi*crvec(1, iR)*HmnR(:,:,iR)*Exp(pi2zi*kdotr)/ndegen(iR)
-        velocities(:,:,2)= velocities(:,:,2) + zi*crvec(2, iR)*HmnR(:,:,iR)*Exp(pi2zi*kdotr)/ndegen(iR)
-        velocities(:,:,3)= velocities(:,:,3) + zi*crvec(3, iR)*HmnR(:,:,iR)*Exp(pi2zi*kdotr)/ndegen(iR)
-    enddo ! iR
-
-    UU_dag= conjg(transpose(UU))
-    !> unitility rotate velocity
-    call mat_mul(Num_wann, velocities(:,:,1), UU, Amat)
-    call mat_mul(Num_wann, UU_dag, Amat, velocities(:,:,1))
-    call mat_mul(Num_wann, velocities(:,:,2), UU, Amat)
-    call mat_mul(Num_wann, UU_dag, Amat, velocities(:,:,2))
-    call mat_mul(Num_wann, velocities(:,:,3), UU, Amat)
-    call mat_mul(Num_wann, UU_dag, Amat, velocities(:,:,3))
-
-end subroutine velocity_latticegauge_simple
-
-
 subroutine ik_to_kpoint(ik,k)
     use para, only: dp, Nk1, Nk2, Nk3, K3D_start_cube, K3D_vec1_cube, K3D_vec2_cube, K3D_vec3_cube
     implicit none

@@ -233,7 +233,9 @@ subroutine ham_bulk_latticegauge(k,Hamk_bulk)
    !
    !        May/29/2011 by Quansheng Wu
 
-   use para, only : dp, pi2zi, HmnR, ndegen, nrpts, irvec, Num_wann, stdout, twopi, zi
+   use para, only : dp, pi2zi, HmnR, ndegen, nrpts, irvec, Num_wann, stdout, twopi, zi, &
+   Add_Zeeman_Field, include_m_orb
+   use magnetic_moments
    implicit none
 
    ! loop index
@@ -247,6 +249,10 @@ subroutine ham_bulk_latticegauge(k,Hamk_bulk)
 
    ! Hamiltonian of bulk system
    complex(Dp),intent(out) ::Hamk_bulk(Num_wann, Num_wann)
+
+   complex(dp), allocatable :: UU(:, :)
+   real(dp),    allocatable :: W(:)
+   complex(dp), allocatable :: velocities(:,:,:)
 
    Hamk_bulk=0d0
    do iR=1, Nrpts
@@ -273,8 +279,49 @@ subroutine ham_bulk_latticegauge(k,Hamk_bulk)
       enddo
    enddo
 
+   if (Add_Zeeman_Field .and. include_m_orb) then
+      allocate( W  (Num_wann))
+      allocate( UU (Num_wann, Num_wann))
+      allocate( velocities(Num_wann, Num_wann, 3))
+
+      UU=Hamk_bulk
+      call eigensystem_c( 'V', 'U', Num_wann, UU, W)
+      call velocity_latticegauge_simple(k, UU, velocities)
+      call add_zeeman_orb(UU, W, velocities)
+
+   endif
    return
 end subroutine ham_bulk_latticegauge
+
+subroutine velocity_latticegauge_simple(k_in, UU, velocities) !> dH_dk, without 1/hbar
+   use para, only: dp, irvec, crvec, HmnR, pi2zi, ndegen, Nrpts, Num_wann, zi, twopi
+   implicit none
+
+   real(dp),    intent(in)  :: k_in(3)
+   complex(dp), intent(in)  :: UU(Num_wann, Num_wann)
+   complex(dp), intent(out) :: velocities(Num_wann, Num_wann, 3)
+
+   real(dp):: kdotr
+   complex(dp) :: ratio
+   integer :: iR
+
+   complex(dp), allocatable :: Amat(:, :), UU_dag(:,:)
+   allocate( Amat(Num_wann, Num_wann), UU_dag(Num_wann, Num_wann))
+
+   velocities= 0d0
+   call dHdk_latticegauge_wann(k_in, velocities)
+
+   UU_dag= conjg(transpose(UU))
+   !> unitility rotate velocity
+   call mat_mul(Num_wann, velocities(:,:,1), UU, Amat)
+   call mat_mul(Num_wann, UU_dag, Amat, velocities(:,:,1))
+   call mat_mul(Num_wann, velocities(:,:,2), UU, Amat)
+   call mat_mul(Num_wann, UU_dag, Amat, velocities(:,:,2))
+   call mat_mul(Num_wann, velocities(:,:,3), UU, Amat)
+   call mat_mul(Num_wann, UU_dag, Amat, velocities(:,:,3))
+
+end subroutine velocity_latticegauge_simple
+
 
 subroutine dHdk_latticegauge_wann(k, velocity_Wannier)
    use para, only : Nrpts, irvec, crvec, Origin_cell, &
@@ -292,15 +339,16 @@ subroutine dHdk_latticegauge_wann(k, velocity_Wannier)
    real(dp) :: kdotr
    complex(dp) :: ratio
 
-   do i=1, 3
-      do iR= 1, Nrpts
-         kdotr= k(1)*irvec(1,iR) + k(2)*irvec(2,iR) + k(3)*irvec(3,iR)
-         ratio= (cos(twopi*kdotr)+zi*sin(twopi*kdotr))
-         velocity_Wannier(:, :, i)= velocity_Wannier(:, :, i)+ &
-            zi*crvec(i, iR)*HmnR(:,:,iR)*ratio/ndegen(iR)
-      enddo ! iR
-   enddo
-
+   do iR= 1, Nrpts
+      kdotr= k(1)*irvec(1,iR) + k(2)*irvec(2,iR) + k(3)*irvec(3,iR)
+      ratio= (cos(twopi*kdotr)+zi*sin(twopi*kdotr))
+      ! ratio= Exp(pi2zi*kdotr)
+      do i=1, 3
+      velocity_Wannier(:, :, i)= velocity_Wannier(:, :, i)+ &
+         zi*crvec(i, iR)*HmnR(:,:,iR)*ratio/ndegen(iR)
+      enddo
+   enddo ! iR
+   
    return
 end subroutine dHdk_latticegauge_wann
 

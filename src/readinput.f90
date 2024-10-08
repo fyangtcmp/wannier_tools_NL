@@ -335,6 +335,8 @@ subroutine readinput
 
    !> By default, we don't add zeeman field
    Add_Zeeman_Field = .FALSE.
+   include_m_spin = .true.
+   include_m_orb  = .true.
 
    !> by default, g-factor is 2
    Effective_gfactor = 2d0
@@ -409,6 +411,8 @@ subroutine readinput
       write(stdout, '(1x, a, 3f16.6)')"Fermi energy (eV) :", E_FERMI
       write(stdout, '(1x, a, 3f16.6)')"surf_onsite (eV): ", surf_onsite
       write(stdout, '(1x, a, L)')"Add_Zeeman_Field: ", Add_Zeeman_Field
+      write(stdout, '(1x, a, L4   )')'include_m_spin =', include_m_spin
+      write(stdout, '(1x, a, L4   )')'include_m_orb  =', include_m_orb
       write(stdout, '(1x, a, 3f16.6)')"Zeeman_energy_in_eV (eV): ",  Zeeman_energy_in_eV
       write(stdout, '(1x, a, 3f16.6)')"Electric_field_in_eVpA (eV/Angstrom): ",  Electric_field_in_eVpA
       write(stdout, '(1x, a, 3f16.6)')"Symmetrical_Electric_field_in_eVpA (eV/Angstrom): ",  Symmetrical_Electric_field_in_eVpA
@@ -586,9 +590,6 @@ subroutine readinput
    Beta= 100
    Relaxation_Time_Tau= 1d0  ! in ps
    topsurface_atom_index= 0
-
-   include_m_spin = .true.
-   include_m_orb  = .true.
    band_degeneracy_threshold = 3.6749d-5
 
 
@@ -652,8 +653,6 @@ subroutine readinput
       write(stdout, '(1x, a, i6   )')'NumRandomConfs:', NumRandomConfs
       write(stdout, '(1x, a, a    )')'Projection weight mode:', projection_weight_mode
       write(stdout, '(1x, a, i8   )')'The size of magnetic supercell is Magq= :', Magq
-      write(stdout, '(1x, a, L4   )')'include_m_spin =', include_m_spin
-      write(stdout, '(1x, a, L4   )')'include_m_orb  =', include_m_orb
       write(stdout, '(1x, a, f16.5)')'band_degeneracy_threshold : ', band_degeneracy_threshold
    endif
 

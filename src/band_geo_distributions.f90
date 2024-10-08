@@ -61,8 +61,7 @@ subroutine band_geo_props_kplane
         case ("SHC")
             call sigma_SHC_single_k_EF(k,  props_mpi(ik, 1:6))
         case Default
-            write(stdout,*) "ERROR: option_prop was wrongly set or did not been provided, must be in ""ISOAHC"" ""INPHC"" ""SHC"" "
-            stop
+            stop "ERROR: option_prop was wrongly set or did not been provided, must be in ""ISOAHC"" ""INPHC"" ""SHC"" "
         end select
 
     enddo ! ik
@@ -159,8 +158,7 @@ subroutine ISOAHC_dist_single_k_Ef(k_in, props)
     elseif (option_sumover=='surface') then ! 'surface'=Fermi surface
         sum_end = Num_wann
     else
-        write(stdout,*) "ERROR: option_sumover was wrongly set, must be in ""sea"" ""surface"" "
-        stop
+        stop "ERROR: option_sumover was wrongly set, must be in ""sea"" ""surface"" "
     endif
 
     do n= 1, sum_end
@@ -328,8 +326,7 @@ subroutine INPHC_dist_single_k_Ef(k_in, props)
     elseif (option_sumover=='surface') then ! 'surface'=Fermi surface
         sum_end = Num_wann
     else
-        write(stdout,*)  "ERROR: option_sumover was wrongly set, must be in ""sea"" ""surface"" "
-        stop
+        stop "ERROR: option_sumover was wrongly set, must be in ""sea"" ""surface"" "
     endif
 
     do n= 1, sum_end
