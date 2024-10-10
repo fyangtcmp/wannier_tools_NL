@@ -1,6 +1,6 @@
 module magnetic_moments
     use para, only: dp, zi, mu_B, Echarge, hbar, Bohr_radius, eV2Hartree, band_degeneracy_threshold, &
-    Num_wann, Nrpts, irvec, HmnR, Bx, By, Bz
+    Num_wann, Nrpts, irvec, HmnR, Bx, By, Bz, Magneticfluxdensity_atomic
     implicit none
 
     !> Lande g-factor
@@ -144,7 +144,7 @@ contains
 
         do ir=1, Nrpts
             if (irvec(1, ir)/=0.or.irvec(2, ir)/=0.or.irvec(3, ir)/=0) cycle
-            HmnR(:, :, ir) = HmnR(:, :, ir) + mu_B * (-0.5d0) * Lande_g_S *( M_S_oper(:,:,1)*Bx + M_S_oper(:,:,2)*By + M_S_oper(:,:,3)*Bz )
+            HmnR(:, :, ir) = HmnR(:, :, ir) + Magneticfluxdensity_atomic * mu_B * (-0.5d0) * Lande_g_S *( M_S_oper(:,:,1)*Bx + M_S_oper(:,:,2)*By + M_S_oper(:,:,3)*Bz )
         enddo ! ir
     end subroutine
 
@@ -164,7 +164,7 @@ contains
 
         do ir=1, Nrpts
             if (irvec(1, ir)/=0.or.irvec(2, ir)/=0.or.irvec(3, ir)/=0) cycle
-            HmnR(:, :, ir) = HmnR(:, :, ir) + mu_B * Lande_g_L *( M_L_oper(:,:,1)*Bx + M_L_oper(:,:,2)*By + M_L_oper(:,:,3)*Bz )
+            HmnR(:, :, ir) = HmnR(:, :, ir) + Magneticfluxdensity_atomic * mu_B * Lande_g_L *( M_L_oper(:,:,1)*Bx + M_L_oper(:,:,2)*By + M_L_oper(:,:,3)*Bz )
         enddo ! ir
 
     end subroutine

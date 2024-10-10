@@ -54,14 +54,14 @@ subroutine band_geo_props_kplane
         k= kslice(ik, :)
 
         select case (option_prop)
-        case ("ISOAHC")
-            call ISOAHC_dist_single_k_Ef(k,  props_mpi(ik, 1:6))
-        case ("INPHC")
-            call INPHC_dist_single_k_Ef(k,  props_mpi(ik, 1:6))
+        case ("SOAHC_int")
+            call SOAHC_int_dist_single_k_Ef(k,  props_mpi(ik, 1:6))
+        case ("NPHC_int")
+            call NPHC_int_dist_single_k_Ef(k,  props_mpi(ik, 1:6))
         case ("SHC")
             call sigma_SHC_single_k_EF(k,  props_mpi(ik, 1:6))
         case Default
-            stop "ERROR: option_prop was wrongly set or did not been provided, must be in ""ISOAHC"" ""INPHC"" ""SHC"" "
+            stop "ERROR: option_prop was wrongly set or did not been provided, must be in ""SOAHC_int"" ""NPHC_int"" ""SHC"" "
         end select
 
     enddo ! ik
@@ -74,13 +74,13 @@ subroutine band_geo_props_kplane
     outfileindex= outfileindex+ 1
     if (cpuid==0) then
         select case (option_prop)
-        case ("ISOAHC")
-            open(unit=outfileindex, file='ISOAHC_kplane.dat')
+        case ("SOAHC_int")
+            open(unit=outfileindex, file='SOAHC_int_kplane.dat')
             write(outfileindex, '("# sumover: Fermi ", a15)') option_sumover
             write(outfileindex, '("#")')
             write(outfileindex, '("#",1a11, 2a12, 15a18)') "kx(1/A)", "ky(1/A)", "kz(1/A)", 'G_{xx}', 'G_{xy}', 'G_{yx}', 'G_{yy}', 'Λ_{xyy}', 'Λ_{yxx}'
-        case ("INPHC")
-            open(unit=outfileindex, file='INPHC_kplane.dat')
+        case ("NPHC_int")
+            open(unit=outfileindex, file='NPHC_int_kplane.dat')
             write(outfileindex, '("# sumover: Fermi ", a15)') option_sumover
             write(outfileindex, '("# unit: (e^2)/hbar * Angstorm^3 * (Ohm * V * T)^-1 ")') 
             write(outfileindex, '("#",1a11, 2a12, 17a20)') "kx(1/A)", "ky(1/A)", "kz(1/A)", '\Upsilon_{xyyy}', '\Upsilon_{yxxx}', '\Upsilon_{xyyx}', '\Upsilon_{yxxy}' 
@@ -111,7 +111,7 @@ subroutine band_geo_props_kplane
 end subroutine
 
 
-subroutine ISOAHC_dist_single_k_Ef(k_in, props)
+subroutine SOAHC_int_dist_single_k_Ef(k_in, props)
     
     use nonlinear_transport
     use para
@@ -193,7 +193,7 @@ subroutine ISOAHC_dist_single_k_Ef(k_in, props)
 end subroutine
 
 
-subroutine INPHC_dist_single_k_Ef(k_in, props) 
+subroutine NPHC_int_dist_single_k_Ef(k_in, props) 
 
     use nonlinear_transport
     use magnetic_moments
