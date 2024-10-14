@@ -518,7 +518,9 @@
 
      integer :: Nrpts ! Number of R points
 
-   
+     !> the index of R lattice vector 000
+     integer :: ir0
+
      integer :: Nk   ! number of k points for different use
      integer :: Nk1  ! number of k points for different use
      integer :: Nk2  ! number of k points for different use

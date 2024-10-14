@@ -37,7 +37,7 @@ module nonlinear_transport
     integer(8), allocatable :: ik_adapt_list(:)
     real(dp), allocatable   :: sk_list(:), sk_list_mpi(:) ! the maximum of abs(sigma) at every kpoint
 
-    integer :: ready = 1d0
+    integer :: ready = 1
 
 contains
     subroutine get_k_fine_list()

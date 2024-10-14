@@ -1,6 +1,6 @@
 module magnetic_moments
     use para, only: dp, zi, mu_B, Echarge, hbar, Bohr_radius, eV2Hartree, band_degeneracy_threshold, &
-    Num_wann, Nrpts, irvec, HmnR, Bx, By, Bz, Magneticfluxdensity_atomic
+    Num_wann, Nrpts, irvec, ir0, HmnR, Bx, By, Bz, Magneticfluxdensity_atomic
     implicit none
 
     !> Lande g-factor
@@ -11,7 +11,6 @@ contains
     subroutine spin_operators(M_S_oper)
         !> extend the 2x2 pauli matrices to Num_wann x Num_wann, without -hbar/2
 
-        use para, only: Package
         implicit none
 
         integer :: j, nwann
@@ -89,7 +88,7 @@ contains
             enddo !n
         enddo !l
         
-        M_L = Lande_g_L * M_L /zi/4 * Echarge / hbar * Bohr_radius**2 ! mu_B is already included here
+        M_L = M_L * Lande_g_L /zi/4 * Echarge / hbar * Bohr_radius**2 ! mu_B is already included here
         return
     end subroutine orbital_magnetic_moments
 
@@ -97,6 +96,7 @@ contains
     subroutine orbital_operators(UU, W, velocities, M_L_oper) 
         !> output M_L, without unit
 
+        use BLAS95, only: zgemm_f95
         implicit none
 
         complex(dp), intent(in)  :: UU(Num_wann, Num_wann)
@@ -104,7 +104,6 @@ contains
         complex(dp), intent(in)  :: velocities(Num_wann, Num_wann,3)
         complex(dp), intent(out) :: M_L_oper(Num_wann, Num_wann, 3)
 
-        integer :: l, n
         complex(dp), allocatable :: M_L(:, :, :), UU_dag(:, :), Amat(:, :)
 
         allocate( M_L(Num_wann, Num_wann, 3), UU_dag(Num_wann, Num_wann), Amat(Num_wann, Num_wann) )
@@ -113,39 +112,25 @@ contains
         M_L_oper = 0d0
         UU_dag= conjg(transpose(UU))
 
-        do l= 1, Num_wann
-            do n= 1, Num_wann
-                call ZGEMM('N','N',  &
-                Num_wann,Num_wann,1, & ! m,n,k
-                1.0,                 & ! ALPHA
-                UU(:,l:l),Num_wann,  & ! matA, m
-                UU_dag(n:n,:),1,     & ! matB, k
-                0.0,                 & ! BETA
-                Amat,Num_wann)         ! matC, m
-
-                M_L_oper(:,:,1) = M_L_oper(:,:,1) + M_L(l,n,1) * Amat
-                M_L_oper(:,:,2) = M_L_oper(:,:,2) + M_L(l,n,2) * Amat
-                M_L_oper(:,:,3) = M_L_oper(:,:,3) + M_L(l,n,3) * Amat 
-            enddo !n
-        enddo !l
+        call zgemm_f95(UU, M_L(:,:,1), Amat)
+        call zgemm_f95(Amat, UU_dag, M_L_oper(:,:,1))
+        call zgemm_f95(UU, M_L(:,:,2), Amat)
+        call zgemm_f95(Amat, UU_dag, M_L_oper(:,:,2))
+        call zgemm_f95(UU, M_L(:,:,3), Amat)
+        call zgemm_f95(Amat, UU_dag, M_L_oper(:,:,3))
                 
         M_L_oper = M_L_oper / mu_B / Lande_g_L
-        return
     end subroutine orbital_operators
 
 
     subroutine add_zeeman_spin() !> be called in readHmnR.f90, subroutine readNormalHmnR
         implicit none
 
-        integer :: ir
         complex(dp), allocatable :: M_S_oper(:, :, :)
         allocate( M_S_oper(Num_wann, Num_wann, 3) )
         call spin_operators(M_S_oper)
 
-        do ir=1, Nrpts
-            if (irvec(1, ir)/=0.or.irvec(2, ir)/=0.or.irvec(3, ir)/=0) cycle
-            HmnR(:, :, ir) = HmnR(:, :, ir) + Magneticfluxdensity_atomic * mu_B * (-0.5d0) * Lande_g_S *( M_S_oper(:,:,1)*Bx + M_S_oper(:,:,2)*By + M_S_oper(:,:,3)*Bz )
-        enddo ! ir
+        HmnR(:, :, ir0) = HmnR(:, :, ir0) + Magneticfluxdensity_atomic * mu_B * (-0.5d0) * Lande_g_S *( M_S_oper(:,:,1)*Bx + M_S_oper(:,:,2)*By + M_S_oper(:,:,3)*Bz )
     end subroutine
 
 
@@ -156,16 +141,11 @@ contains
         real(dp),    intent(in)  :: W(Num_wann)
         complex(dp), intent(in)  :: velocities(Num_wann, Num_wann,3)
 
-        integer :: ir
         complex(dp), allocatable :: M_L_oper(:, :, :)
         allocate( M_L_oper(Num_wann, Num_wann, 3) )
 
         call orbital_operators(UU, W, velocities, M_L_oper) 
 
-        do ir=1, Nrpts
-            if (irvec(1, ir)/=0.or.irvec(2, ir)/=0.or.irvec(3, ir)/=0) cycle
-            HmnR(:, :, ir) = HmnR(:, :, ir) + Magneticfluxdensity_atomic * mu_B * Lande_g_L *( M_L_oper(:,:,1)*Bx + M_L_oper(:,:,2)*By + M_L_oper(:,:,3)*Bz )
-        enddo ! ir
-
+        HmnR(:, :, ir0) = HmnR(:, :, ir0) + Magneticfluxdensity_atomic * mu_B * Lande_g_L *( M_L_oper(:,:,1)*Bx + M_L_oper(:,:,2)*By + M_L_oper(:,:,3)*Bz )
     end subroutine
 end module

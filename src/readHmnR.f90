@@ -19,7 +19,7 @@ subroutine readNormalHmnR()
 
    integer :: i, j, ir, ia, io 
    integer :: i1, i2, i3, i4, i5
-   integer :: n, m, ir0
+   integer :: n, m
    integer :: add_electric_field
    integer :: nwann, nwann_nsoc
 
@@ -399,7 +399,7 @@ subroutine readSparseHmnR
    use para
    implicit none
    integer:: i,j,nwann,nwann_nsoc,i1,i2,i3,i4,i5,ir, ia, io
-   integer :: q,n,m, ir0 
+   integer :: q,n,m
    real(8) :: r1,r2, pos(Origin_cell%Num_atoms), static_potential
 
    !> the direction which adding electric field which is also the stacking direction
@@ -751,7 +751,7 @@ subroutine add_zeeman_sparse_hr(Bx_in_au, By_in_au, Bz_in_au)
 
    real(dp), intent(in) :: Bx_in_au, By_in_au, Bz_in_au
 
-   integer :: nwann_nsoc, i, j, ir0, ir
+   integer :: nwann_nsoc, i, j, ir
    real(dp) :: Zeeman_energy_in_hartree_factor
 
    nwann_nsoc= Num_wann/2

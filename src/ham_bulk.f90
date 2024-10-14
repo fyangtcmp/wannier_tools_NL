@@ -294,16 +294,13 @@ subroutine ham_bulk_latticegauge(k,Hamk_bulk)
 end subroutine ham_bulk_latticegauge
 
 subroutine velocity_latticegauge_simple(k_in, UU, velocities) !> dH_dk, without 1/hbar
-   use para, only: dp, irvec, crvec, HmnR, pi2zi, ndegen, Nrpts, Num_wann, zi, twopi
+   use BLAS95, only: zgemm_f95
+   use para, only: dp, Num_wann
    implicit none
 
    real(dp),    intent(in)  :: k_in(3)
    complex(dp), intent(in)  :: UU(Num_wann, Num_wann)
    complex(dp), intent(out) :: velocities(Num_wann, Num_wann, 3)
-
-   real(dp):: kdotr
-   complex(dp) :: ratio
-   integer :: iR
 
    complex(dp), allocatable :: Amat(:, :), UU_dag(:,:)
    allocate( Amat(Num_wann, Num_wann), UU_dag(Num_wann, Num_wann))
@@ -313,18 +310,18 @@ subroutine velocity_latticegauge_simple(k_in, UU, velocities) !> dH_dk, without 
 
    UU_dag= conjg(transpose(UU))
    !> unitility rotate velocity
-   call mat_mul(Num_wann, velocities(:,:,1), UU, Amat)
-   call mat_mul(Num_wann, UU_dag, Amat, velocities(:,:,1))
-   call mat_mul(Num_wann, velocities(:,:,2), UU, Amat)
-   call mat_mul(Num_wann, UU_dag, Amat, velocities(:,:,2))
-   call mat_mul(Num_wann, velocities(:,:,3), UU, Amat)
-   call mat_mul(Num_wann, UU_dag, Amat, velocities(:,:,3))
+   call zgemm_f95( velocities(:,:,1), UU, Amat)
+   call zgemm_f95( UU_dag, Amat, velocities(:,:,1))
+   call zgemm_f95( velocities(:,:,2), UU, Amat)
+   call zgemm_f95( UU_dag, Amat, velocities(:,:,2))
+   call zgemm_f95( velocities(:,:,3), UU, Amat)
+   call zgemm_f95( UU_dag, Amat, velocities(:,:,3))
 
 end subroutine velocity_latticegauge_simple
 
 
 subroutine dHdk_latticegauge_wann(k, velocity_Wannier)
-   use para, only : Nrpts, irvec, crvec, Origin_cell, &
+   use para, only : Nrpts, irvec, crvec, &
       HmnR, ndegen, Num_wann, zi, pi2zi, dp, twopi
    implicit none
 
