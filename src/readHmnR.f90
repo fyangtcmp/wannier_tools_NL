@@ -169,7 +169,11 @@ subroutine readNormalHmnR()
       endif
    endif
 
-
+   ir0=0
+   do ir=1, nrpts
+      if (irvec(1, ir)==0.and.irvec(2, ir)==0.and.irvec(3, ir)==0) ir0=ir
+   enddo
+   
    !> Adding zeeman field
    !> Bx=Bdirection(1)
    !> By=Bdirection(2)
@@ -191,10 +195,6 @@ subroutine readNormalHmnR()
 
 
    call get_stacking_direction_and_pos(add_electric_field, pos)
-   ir0=0
-   do ir=1, nrpts
-      if (irvec(1, ir)==0.and.irvec(2, ir)==0.and.irvec(3, ir)==0) ir0=ir
-   enddo
  
    if (add_electric_field>0) then
      io=0
