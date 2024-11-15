@@ -239,6 +239,7 @@ contains
         call ham_bulk_latticegauge(k_in, Hamk_bulk)
         UU=Hamk_bulk
         call eigensystem_c( 'V', 'U', Num_wann, UU, W)
+        ! call dHdk_latticegauge_Ham(k_in, W, UU, velocities)
         call velocity_latticegauge_simple(k_in, UU, velocities)
         vx = velocities(:,:,1)
         vy = velocities(:,:,2)
@@ -266,6 +267,7 @@ contains
         call ham_bulk_latticegauge(k_dkx, Hamk_bulk)
         UU=Hamk_bulk
         call eigensystem_c( 'V', 'U', Num_wann, UU, W_dkx)
+        ! call dHdk_latticegauge_Ham(k_dkx, W_dkx, UU, velocities)
         call velocity_latticegauge_simple(k_dkx, UU, velocities)
         vx_dkx = velocities(:,:,1)
         vy_dkx = velocities(:,:,2)
@@ -280,6 +282,7 @@ contains
         call ham_bulk_latticegauge(k_dky, Hamk_bulk)
         UU=Hamk_bulk
         call eigensystem_c( 'V', 'U', Num_wann, UU, W_dky)
+        ! call dHdk_latticegauge_Ham(k_dky, W_dky, UU, velocities)
         call velocity_latticegauge_simple(k_dky, UU, velocities)
         vx_dky = velocities(:,:,1)
         vy_dky = velocities(:,:,2)
@@ -393,7 +396,7 @@ contains
     end subroutine
 
 
-    subroutine sigma_NPHC_tau2_single_k(k_in, Chi_xyyy_k, Chi_yxxx_k)
+    subroutine sigma_NPHC_tau2_single_k(k_in, Chi_xyyy_k, Chi_yxxx_k, Chi_xyyx_k, Chi_yxxy_k)
         use magnetic_moments
         use para
         implicit none
@@ -401,9 +404,16 @@ contains
         real(dp), intent(in)  :: k_in(3)
         real(dp), intent(out) :: Chi_xyyy_k(OmegaNum, Eta_number, 2, 2) !> the third index: 1=spin, 2=orbital
         real(dp), intent(out) :: Chi_yxxx_k(OmegaNum, Eta_number, 2, 2)
+        real(dp), intent(out) :: Chi_xyyx_k(OmegaNum, Eta_number, 2, 2) !> the third index: 1=spin, 2=orbital
+        real(dp), intent(out) :: Chi_yxxy_k(OmegaNum, Eta_number, 2, 2)
     
         complex(dp), allocatable :: M_S(:, :, :) !> spin magnetic moments
         complex(dp), allocatable :: M_L(:, :, :) !> orbital magnetic moments
+
+        complex(dp), allocatable :: M_S_dx(:, :, :)
+        complex(dp), allocatable :: M_L_dx(:, :, :)
+        complex(dp), allocatable :: M_S_dy(:, :, :)
+        complex(dp), allocatable :: M_L_dy(:, :, :)
             
         real(dp) :: k_dkx(3)
         real(dp) :: k_dky(3)
@@ -415,21 +425,11 @@ contains
         real(dp),    allocatable :: W(:)
         complex(dp), allocatable :: Hamk_bulk(:, :)
         complex(dp), allocatable :: UU(:, :)
-    
-        real(dp), allocatable :: W_dkx(:)
-        real(dp), allocatable :: W_dky(:)
-    
-        complex(dp), allocatable :: sx(:, :), sy(:, :)
-        complex(dp), allocatable :: lx(:, :), ly(:, :)
-        complex(dp), allocatable :: vx(:, :), vy(:, :)
-        complex(dp), allocatable :: velocities(:,:,:)
-    
-        complex(dp), allocatable :: vx_dkx(:, :), vy_dkx(:, :)  
-        complex(dp), allocatable :: vx_dky(:, :), vy_dky(:, :)
-        complex(dp), allocatable :: sy_dkx(:, :), ly_dkx(:, :)  
-        complex(dp), allocatable :: sx_dky(:, :), lx_dky(:, :) 
+
+        complex(dp), allocatable :: v0(:,:,:), v_dx(:,:,:), v_dy(:,:,:)
     
         real(dp) :: alpha_xyyy_S, alpha_xyyy_L, alpha_yxxx_S, alpha_yxxx_L
+        real(dp) :: alpha_xyyx_S, alpha_xyyx_L, alpha_yxxy_S, alpha_yxxy_L
         
         allocate( Fshort(OmegaNum), diffFermi(OmegaNum), diff2Fermi(OmegaNum))
 
@@ -439,85 +439,58 @@ contains
         allocate( Hamk_bulk (Num_wann, Num_wann))
         allocate( UU (Num_wann, Num_wann))
     
-        allocate( velocities(Num_wann, Num_wann, 3))
-        allocate( vx(Num_wann, Num_wann), vy(Num_wann, Num_wann))
-        allocate( sx(Num_wann, Num_wann), sy(Num_wann, Num_wann))
-        allocate( lx(Num_wann, Num_wann), ly(Num_wann, Num_wann))
-    
-        call ham_bulk_latticegauge(k_in, Hamk_bulk)
-        UU=Hamk_bulk
-        call eigensystem_c( 'V', 'U', Num_wann, UU, W)
-        call velocity_latticegauge_simple(k_in, UU, velocities)
-        vx = velocities(:,:,1)
-        vy = velocities(:,:,2)
-    
-        !> magnetic mats
-        allocate( M_S(Num_wann, Num_wann,3) )
-        allocate( M_L(Num_wann, Num_wann,3) )
-    
-        M_S = 0d0
-        M_L = 0d0
-        if (include_m_spin) then
-            call spin_magnetic_moments(UU, M_S)
-            sx = M_S(:,:,1)
-            sy = M_S(:,:,2)
-        endif
-        if (include_m_orb) then
-            call orbital_magnetic_moments(W, velocities, M_L)
-            lx = M_L(:,:,1)
-            ly = M_L(:,:,2)
-        endif    
+        allocate( v0(Num_wann, Num_wann, 3), v_dx(Num_wann, Num_wann, 3),  v_dy(Num_wann, Num_wann, 3))
+        allocate( M_S(Num_wann, Num_wann,3), M_S_dx(Num_wann, Num_wann,3), M_S_dy(Num_wann, Num_wann,3))
+        allocate( M_L(Num_wann, Num_wann,3), M_L_dx(Num_wann, Num_wann,3), M_L_dy(Num_wann, Num_wann,3)) 
     
         !> k + dk_x <===============================================================
-        allocate( W_dkx (Num_wann))   
-        allocate( vx_dkx(Num_wann, Num_wann), vy_dkx(Num_wann, Num_wann))
-        allocate( sy_dkx(Num_wann, Num_wann), ly_dkx(Num_wann, Num_wann))
-    
         k_dkx = k_in+(/Origin_cell%Rua(1)*dkx , Origin_cell%Rub(1)*dkx , Origin_cell%Ruc(1)*dkx/)/twopi
     
         call ham_bulk_latticegauge(k_dkx, Hamk_bulk)
         UU=Hamk_bulk
-        call eigensystem_c( 'V', 'U', Num_wann, UU, W_dkx)
-        call velocity_latticegauge_simple(k_dkx, UU, velocities)
-        vx_dkx = velocities(:,:,1)
-        vy_dkx = velocities(:,:,2)
+        call eigensystem_c( 'V', 'U', Num_wann, UU, W)
+        call velocity_latticegauge_simple(k_dkx, UU, v_dx)
 
         if (include_m_spin) then
-            call spin_magnetic_moments(UU, M_S)
-            sy_dkx = M_S(:,:,2)
+            call spin_magnetic_moments(UU, M_S_dx)
         endif
         if (include_m_orb) then
-            call orbital_magnetic_moments(W_dkx, velocities, M_L)
-            ly_dkx = M_L(:,:,2)
+            call orbital_magnetic_moments(W, v_dx, M_L_dx)
         endif  
         !===========================================================================
     
         !> k + dk_y <===============================================================
-        allocate( W_dky (Num_wann))
-        allocate( vx_dky(Num_wann, Num_wann), vy_dky(Num_wann, Num_wann))
-        allocate( sx_dky(Num_wann, Num_wann), lx_dky(Num_wann, Num_wann))
-    
         k_dky = k_in+(/Origin_cell%Rua(2)*dky , Origin_cell%Rub(2)*dky , Origin_cell%Ruc(2)*dky/)/twopi
     
         call ham_bulk_latticegauge(k_dky, Hamk_bulk)
         UU=Hamk_bulk
-        call eigensystem_c( 'V', 'U', Num_wann, UU, W_dky)
-        call velocity_latticegauge_simple(k_dky, UU, velocities)
-        vx_dky = velocities(:,:,1)
-        vy_dky = velocities(:,:,2)
+        call eigensystem_c( 'V', 'U', Num_wann, UU, W)
+        call velocity_latticegauge_simple(k_dky, UU, v_dy)
 
         if (include_m_spin) then
-            call spin_magnetic_moments(UU, M_S)
-            sx_dky = M_S(:,:,1)
+            call spin_magnetic_moments(UU, M_S_dy)
         endif
         if (include_m_orb) then
-            call orbital_magnetic_moments(W_dky, velocities, M_L)
-            lx_dky = M_L(:,:,1)
+            call orbital_magnetic_moments(W, v_dy, M_L_dy)
         endif  
         !===========================================================================
     
+        call ham_bulk_latticegauge(k_in, Hamk_bulk)
+        UU=Hamk_bulk
+        call eigensystem_c( 'V', 'U', Num_wann, UU, W)
+        call velocity_latticegauge_simple(k_in, UU, v0)
+
+        if (include_m_spin) then
+            call spin_magnetic_moments(UU, M_S)
+        endif
+        if (include_m_orb) then
+            call orbital_magnetic_moments(W, v0, M_L)
+        endif 
+
         Chi_xyyy_k = 0d0
         Chi_yxxx_k = 0d0
+        Chi_xyyx_k = 0d0
+        Chi_yxxy_k = 0d0
     
         do n= 1, Num_wann
             if (W(n)<OmegaMin- 2.d-2 .or. W(n)>OmegaMax+ 2.d-2) cycle !> prevent NaN error
@@ -527,14 +500,23 @@ contains
             alpha_xyyy_L= 0d0
             alpha_yxxx_L= 0d0
 
+            alpha_xyyx_S= 0d0
+            alpha_yxxy_S= 0d0
+            alpha_xyyx_L= 0d0
+            alpha_yxxy_L= 0d0
+
             if (include_m_spin) then
-                alpha_xyyy_S = real( (sy_dkx(n,n) - sy(n,n))/dkx*(vy(n,n)**2) - (vy_dky(n,n) - vy(n,n))/dky*sy(n,n)*vx(n,n) )
-                alpha_yxxx_S = real( (sx_dky(n,n) - sx(n,n))/dky*(vx(n,n)**2) - (vx_dkx(n,n) - vx(n,n))/dkx*sx(n,n)*vy(n,n) )
+                alpha_xyyy_S = real((M_S_dx(n,n,2) - M_S(n,n,2))/dkx*(v0(n,n,2)**2) - (v_dy(n,n,2) - v0(n,n,2))/dky*M_S(n,n,2)*v0(n,n,1))
+                alpha_yxxx_S = real((M_S_dy(n,n,1) - M_S(n,n,1))/dky*(v0(n,n,1)**2) - (v_dx(n,n,1) - v0(n,n,1))/dkx*M_S(n,n,1)*v0(n,n,2))
+                alpha_xyyx_S = real((M_S_dx(n,n,1) - M_S(n,n,1))/dkx*(v0(n,n,2)**2) - (v_dy(n,n,2) - v0(n,n,2))/dky*M_S(n,n,1)*v0(n,n,1))
+                alpha_yxxy_S = real((M_S_dy(n,n,2) - M_S(n,n,2))/dky*(v0(n,n,1)**2) - (v_dx(n,n,1) - v0(n,n,1))/dkx*M_S(n,n,2)*v0(n,n,2))
             endif
 
             if (include_m_orb) then
-                alpha_xyyy_L = real( (ly_dkx(n,n) - ly(n,n))/dkx*(vy(n,n)**2) - (vy_dky(n,n) - vy(n,n))/dky*ly(n,n)*vx(n,n) )
-                alpha_yxxx_L = real( (lx_dky(n,n) - lx(n,n))/dky*(vx(n,n)**2) - (vx_dkx(n,n) - vx(n,n))/dkx*lx(n,n)*vy(n,n) )
+                alpha_xyyy_L = real((M_L_dx(n,n,2) - M_L(n,n,2))/dkx*(v0(n,n,2)**2) - (v_dy(n,n,2) - v0(n,n,2))/dky*M_L(n,n,2)*v0(n,n,1))
+                alpha_yxxx_L = real((M_L_dy(n,n,1) - M_L(n,n,1))/dky*(v0(n,n,1)**2) - (v_dx(n,n,1) - v0(n,n,1))/dkx*M_L(n,n,1)*v0(n,n,2))
+                alpha_xyyx_L = real((M_L_dx(n,n,1) - M_L(n,n,1))/dkx*(v0(n,n,2)**2) - (v_dy(n,n,2) - v0(n,n,2))/dky*M_L(n,n,1)*v0(n,n,1))
+                alpha_yxxy_L = real((M_L_dy(n,n,2) - M_L(n,n,2))/dky*(v0(n,n,1)**2) - (v_dx(n,n,1) - v0(n,n,1))/dkx*M_L(n,n,2)*v0(n,n,2))
             endif
     
             do ieta=1, Eta_number
@@ -547,10 +529,14 @@ contains
                 if (include_m_spin) then
                     Chi_xyyy_k(:,ieta, 1, 1) = Chi_xyyy_k(:,ieta, 1, 1) + alpha_xyyy_S * diff2Fermi
                     Chi_yxxx_k(:,ieta, 1, 1) = Chi_yxxx_k(:,ieta, 1, 1) + alpha_yxxx_S * diff2Fermi
+                    Chi_xyyx_k(:,ieta, 1, 1) = Chi_xyyx_k(:,ieta, 1, 1) + alpha_xyyx_S * diff2Fermi
+                    Chi_yxxy_k(:,ieta, 1, 1) = Chi_yxxy_k(:,ieta, 1, 1) + alpha_yxxy_S * diff2Fermi
                 endif
                 if (include_m_orb) then
                     Chi_xyyy_k(:,ieta, 2, 1) = Chi_xyyy_k(:,ieta, 2, 1) + alpha_xyyy_L * diff2Fermi
                     Chi_yxxx_k(:,ieta, 2, 1) = Chi_yxxx_k(:,ieta, 2, 1) + alpha_yxxx_L * diff2Fermi
+                    Chi_xyyx_k(:,ieta, 2, 1) = Chi_xyyx_k(:,ieta, 2, 1) + alpha_xyyx_L * diff2Fermi
+                    Chi_yxxy_k(:,ieta, 2, 1) = Chi_yxxy_k(:,ieta, 2, 1) + alpha_yxxy_L * diff2Fermi
                 endif
             enddo ! ieta
         enddo ! n
@@ -1102,8 +1088,7 @@ end subroutine
 
 
 subroutine sigma_NPHC_tau2 ! dynamical mpi, auto adapted k-mesh
-    !> Calculate the tau^2 nonlinear planar Hall conductivity, the xyyy and yxxx elements
-    !
+    !> Calculate the tau^2 nonlinear planar Hall conductivity
     !> ref: DOI: 10.1103/PhysRevB.108.075155, eq(18)
     !
     !> usage: sigma_NPHC_tau2_calc = T
@@ -1116,7 +1101,7 @@ subroutine sigma_NPHC_tau2 ! dynamical mpi, auto adapted k-mesh
     use nonlinear_transport
     implicit none
 
-    real(dp), parameter :: NPHC_tau2_unit_factor = Echarge**3/hbar**3 *Hartree2J
+    real(dp), parameter :: NPHC_tau2_unit_factor = - Echarge**3/hbar**3 *Hartree2J ! -1 from -tau^2
 
     real(dp), allocatable :: Chi_xyyy_k         (:,:,:,:)
     real(dp), allocatable :: Chi_yxxx_k         (:,:,:,:)
@@ -1125,7 +1110,14 @@ subroutine sigma_NPHC_tau2 ! dynamical mpi, auto adapted k-mesh
     real(dp), allocatable :: Chi_xyyy_tensor_mpi(:,:,:,:)
     real(dp), allocatable :: Chi_yxxx_tensor_mpi(:,:,:,:)
 
-    real(dp) :: max_tmp(2)
+    real(dp), allocatable :: Chi_xyyx_k         (:,:,:,:)
+    real(dp), allocatable :: Chi_yxxy_k         (:,:,:,:)
+    real(dp), allocatable :: Chi_xyyx_tensor    (:,:,:,:)
+    real(dp), allocatable :: Chi_yxxy_tensor    (:,:,:,:)
+    real(dp), allocatable :: Chi_xyyx_tensor_mpi(:,:,:,:)
+    real(dp), allocatable :: Chi_yxxy_tensor_mpi(:,:,:,:)
+
+    real(dp) :: max_tmp(4)
 
     Eta_array(1) = Eta_Arc !> from wt.in
     Eta_array(2:Eta_number) = Eta_array_fixed(1:Eta_number-1)
@@ -1137,10 +1129,22 @@ subroutine sigma_NPHC_tau2 ! dynamical mpi, auto adapted k-mesh
     allocate( Chi_xyyy_tensor_mpi(OmegaNum, Eta_number,2,2))
     allocate( Chi_yxxx_tensor_mpi(OmegaNum, Eta_number,2,2))
 
+    allocate( Chi_xyyx_k         (OmegaNum, Eta_number,2,2))
+    allocate( Chi_yxxy_k         (OmegaNum, Eta_number,2,2))
+    allocate( Chi_xyyx_tensor    (OmegaNum, Eta_number,2,2))
+    allocate( Chi_yxxy_tensor    (OmegaNum, Eta_number,2,2))
+    allocate( Chi_xyyx_tensor_mpi(OmegaNum, Eta_number,2,2))
+    allocate( Chi_yxxy_tensor_mpi(OmegaNum, Eta_number,2,2))
+
     Chi_xyyy_tensor     = 0d0
     Chi_yxxx_tensor     = 0d0
     Chi_xyyy_tensor_mpi = 0d0
     Chi_yxxx_tensor_mpi = 0d0
+
+    Chi_xyyx_tensor     = 0d0
+    Chi_yxxy_tensor     = 0d0
+    Chi_xyyx_tensor_mpi = 0d0
+    Chi_yxxy_tensor_mpi = 0d0
 
     allocate( energy(OmegaNum))
     call get_Fermi_energy_list(energy)
@@ -1177,10 +1181,12 @@ subroutine sigma_NPHC_tau2 ! dynamical mpi, auto adapted k-mesh
 
             if (ik>knv3) exit
             call ik_to_kpoint(ik,k)
-            call sigma_NPHC_tau2_single_k(k, Chi_xyyy_k, Chi_yxxx_k)
+            call sigma_NPHC_tau2_single_k(k, Chi_xyyy_k, Chi_yxxx_k, Chi_xyyx_k, Chi_yxxy_k)
 
             max_tmp(1) = maxval(abs(Chi_xyyy_k))
             max_tmp(2) = maxval(abs(Chi_yxxx_k))
+            max_tmp(3) = maxval(abs(Chi_xyyx_k))
+            max_tmp(4) = maxval(abs(Chi_yxxy_k))
             sk_list_mpi(ik) = maxval( max_tmp )
         enddo
     endif
@@ -1219,25 +1225,33 @@ subroutine sigma_NPHC_tau2 ! dynamical mpi, auto adapted k-mesh
             if (ik>knv3) exit
             call ik_to_kpoint(ik,k)
             do ikfine=1, knv3_fine
-                call sigma_NPHC_tau2_single_k(k + k_fine_list(ikfine,:), Chi_xyyy_k, Chi_yxxx_k)
+                call sigma_NPHC_tau2_single_k(k + k_fine_list(ikfine,:), Chi_xyyy_k, Chi_yxxx_k, Chi_xyyx_k, Chi_yxxy_k)
     
                 Chi_xyyy_tensor_mpi = Chi_xyyy_tensor_mpi + Chi_xyyy_k/dble(knv3_fine)
                 Chi_yxxx_tensor_mpi = Chi_yxxx_tensor_mpi + Chi_yxxx_k/dble(knv3_fine)
+                Chi_xyyx_tensor_mpi = Chi_xyyx_tensor_mpi + Chi_xyyx_k/dble(knv3_fine)
+                Chi_yxxy_tensor_mpi = Chi_yxxy_tensor_mpi + Chi_yxxy_k/dble(knv3_fine)
             enddo
         enddo
     endif
 
     call mpi_reduce(Chi_xyyy_tensor_mpi, Chi_xyyy_tensor, size(Chi_xyyy_tensor), mpi_dp,mpi_sum, 0, mpi_cmw,ierr)
     call mpi_reduce(Chi_yxxx_tensor_mpi, Chi_yxxx_tensor, size(Chi_yxxx_tensor), mpi_dp,mpi_sum, 0, mpi_cmw,ierr)
+    call mpi_reduce(Chi_xyyx_tensor_mpi, Chi_xyyx_tensor, size(Chi_xyyx_tensor), mpi_dp,mpi_sum, 0, mpi_cmw,ierr)
+    call mpi_reduce(Chi_yxxy_tensor_mpi, Chi_yxxy_tensor, size(Chi_yxxy_tensor), mpi_dp,mpi_sum, 0, mpi_cmw,ierr)
 #endif
 
     if (cpuid==0) then
         Chi_xyyy_tensor = Chi_xyyy_tensor * NPHC_tau2_unit_factor /dble(knv3)/Origin_cell%CellVolume*kCubeVolume/Origin_cell%ReciprocalCellVolume
         Chi_yxxx_tensor = Chi_yxxx_tensor * NPHC_tau2_unit_factor /dble(knv3)/Origin_cell%CellVolume*kCubeVolume/Origin_cell%ReciprocalCellVolume
+        Chi_xyyx_tensor = Chi_xyyx_tensor * NPHC_tau2_unit_factor /dble(knv3)/Origin_cell%CellVolume*kCubeVolume/Origin_cell%ReciprocalCellVolume
+        Chi_yxxy_tensor = Chi_yxxy_tensor * NPHC_tau2_unit_factor /dble(knv3)/Origin_cell%CellVolume*kCubeVolume/Origin_cell%ReciprocalCellVolume
 
         if (Nk3==1) then
             Chi_xyyy_tensor = Chi_xyyy_tensor* Origin_cell%Ruc(3)/Ang2Bohr
             Chi_yxxx_tensor = Chi_yxxx_tensor* Origin_cell%Ruc(3)/Ang2Bohr
+            Chi_xyyx_tensor = Chi_xyyx_tensor* Origin_cell%Ruc(3)/Ang2Bohr
+            Chi_yxxy_tensor = Chi_yxxy_tensor* Origin_cell%Ruc(3)/Ang2Bohr
         endif
 
         outfileindex= outfileindex+ 1
@@ -1250,11 +1264,13 @@ subroutine sigma_NPHC_tau2 ! dynamical mpi, auto adapted k-mesh
                 write(outfileindex, '("#",a)')' tau2 nonlinear planar hall effect, in unit of A*V^-2*T^-1 for 3D case, Ang*A*V^-2*T^-1 for 2D cases'
                 write(outfileindex, '("#",a)')' Without Tau'
 
-                write(outfileindex, '("#",a13, 20a16)')' Energy (eV)', '\sigma_xyyy_I', '\sigma_xyyy_II', '\sigma_xyyy_tot', '\sigma_yxxx_I', '\sigma_yxxx_II','\sigma_yxxx_tot'
+                write(outfileindex, '("#",a13, 20a16)')' Energy (eV)', '\chi_{xyyy,I}', '\chi_{xyyy,II}', '\chi_{xyyy}', '\chi_{yxxx,I}', '\chi_{yxxx,II}','\chi_{yxxx}', '\chi_{xyyx,I}', '\chi_{xyyx,II}', '\chi_{xyyx}', '\chi_{yxxy,I}', '\chi_{yxxy,II}','\chi_{yxxy}'
                 do ie=1, OmegaNum
                     write(outfileindex, '(200E16.8)')energy(ie)/eV2Hartree, &
                         Chi_xyyy_tensor(ie,ieta,1,1), Chi_xyyy_tensor(ie,ieta,1,2), Chi_xyyy_tensor(ie,ieta,1,1) + Chi_xyyy_tensor(ie,ieta,1,2),&
-                        Chi_yxxx_tensor(ie,ieta,1,1), Chi_yxxx_tensor(ie,ieta,1,2), Chi_yxxx_tensor(ie,ieta,1,1) + Chi_yxxx_tensor(ie,ieta,1,2)
+                        Chi_yxxx_tensor(ie,ieta,1,1), Chi_yxxx_tensor(ie,ieta,1,2), Chi_yxxx_tensor(ie,ieta,1,1) + Chi_yxxx_tensor(ie,ieta,1,2),&
+                        Chi_xyyx_tensor(ie,ieta,1,1), Chi_xyyx_tensor(ie,ieta,1,2), Chi_xyyx_tensor(ie,ieta,1,1) + Chi_xyyx_tensor(ie,ieta,1,2),&
+                        Chi_yxxy_tensor(ie,ieta,1,1), Chi_yxxy_tensor(ie,ieta,1,2), Chi_yxxy_tensor(ie,ieta,1,1) + Chi_yxxy_tensor(ie,ieta,1,2)
                 enddo
                 close(outfileindex)
             endif
@@ -1264,12 +1280,14 @@ subroutine sigma_NPHC_tau2 ! dynamical mpi, auto adapted k-mesh
                 open(unit=outfileindex, file=ahcfilename)
                 write(outfileindex, '("#",a)')' tau2 nonlinear planar hall effect, in unit of A*V^-2*T^-1 for 3D case, Ang*A*V^-2*T^-1 for 2D cases'
                 write(outfileindex, '("#",a)')' Without Tau'
-
-                write(outfileindex, '("#",a13, 20a16)')' Energy (eV)', '\sigma_xyyy_I', '\sigma_xyyy_II', '\sigma_xyyy_tot', '\sigma_yxxx_I', '\sigma_yxxx_II','\sigma_yxxx_tot'
+                
+                write(outfileindex, '("#",a13, 20a16)')' Energy (eV)', '\chi_{xyyy,I}', '\chi_{xyyy,II}', '\chi_{xyyy}', '\chi_{yxxx,I}', '\chi_{yxxx,II}','\chi_{yxxx}', '\chi_{xyyx,I}', '\chi_{xyyx,II}', '\chi_{xyyx}', '\chi_{yxxy,I}', '\chi_{yxxy,II}','\chi_{yxxy}'
                 do ie=1, OmegaNum
                     write(outfileindex, '(200E16.8)')energy(ie)/eV2Hartree, &
                         Chi_xyyy_tensor(ie,ieta,2,1), Chi_xyyy_tensor(ie,ieta,2,2), Chi_xyyy_tensor(ie,ieta,2,1) + Chi_xyyy_tensor(ie,ieta,2,2),&
-                        Chi_yxxx_tensor(ie,ieta,2,1), Chi_yxxx_tensor(ie,ieta,2,2), Chi_yxxx_tensor(ie,ieta,2,1) + Chi_yxxx_tensor(ie,ieta,2,2)
+                        Chi_yxxx_tensor(ie,ieta,2,1), Chi_yxxx_tensor(ie,ieta,2,2), Chi_yxxx_tensor(ie,ieta,2,1) + Chi_yxxx_tensor(ie,ieta,2,2),&
+                        Chi_xyyx_tensor(ie,ieta,2,1), Chi_xyyx_tensor(ie,ieta,2,2), Chi_xyyx_tensor(ie,ieta,2,1) + Chi_xyyx_tensor(ie,ieta,2,2),&
+                        Chi_yxxy_tensor(ie,ieta,2,1), Chi_yxxy_tensor(ie,ieta,2,2), Chi_yxxy_tensor(ie,ieta,2,1) + Chi_yxxy_tensor(ie,ieta,2,2)
                 enddo
                 close(outfileindex)
             endif

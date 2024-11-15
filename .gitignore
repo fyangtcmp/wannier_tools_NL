@@ -3,8 +3,7 @@
 */*.mod
 */*~
 */*/*~
-*/*/sigma*dat
-*/*/rho*dat
-benchmarks/
 src.zip
-mkl_blas.f90
+benchmarks/
+postprocess/
+src_cuda/
