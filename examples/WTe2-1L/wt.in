@@ -1,0 +1,60 @@
+&TB_FILE 
+Hrfile = 'wannier90_symmed_hr_Bxy.dat'
+Package = 'QE' 
+/
+
+LATTICE
+Angstrom
+        3.5185995102         0.0000000000         0.0000000000
+        0.0000000000         6.3023362160         0.0000000000
+        0.0000000000         0.0000000000        30.0115528107
+ATOM_POSITIONS
+6
+Direct
+Te    0.000000000         0.204200104         0.330120146
+Te    0.500000000         0.697269678         0.309623778
+Te    0.000000000         0.857740223         0.447946340
+Te    0.500000000         0.352027744         0.427414060
+W     0.500000000         0.955995917         0.382366538
+W     0.000000000         0.600375235         0.375174135
+
+
+PROJECTORS
+ 3 3 3 3 5 5 
+Te pz px py
+Te pz px py
+Te pz px py
+Te pz px py
+W  dz2 dxz dyz dx2-y2 dxy
+W  dz2 dxz dyz dx2-y2 dxy
+
+
+&CONTROL
+sigma_SOAHC_int_calc = T
+/
+
+&SYSTEM
+SOC = 1
+E_FERMI = -0.1746
+/
+
+&PARAMETERS
+OmegaNum =  401      ! omega number
+OmegaMin = -0.03      ! energy interval
+OmegaMax =  0.05      ! energy interval
+Nk1 = 1501           ! number k points  odd number would be better
+Nk2 = 1501
+Nk3 =    1
+Eta_Arc = 0.001
+/
+
+SURFACE     
+ 1  0  0
+ 0  1  0
+ 0  0  1
+
+KCUBE_BULK
+ -0.5 -0.5 -0.5   ! Original point for 3D k plane
+  1.0  0.0  0.0   ! The first vector to define 3d k space plane
+  0.0  1.0  0.0   ! The second vector to define 3d k space plane
+  0.0  0.0  1.0   ! The third vector to define 3d k cube

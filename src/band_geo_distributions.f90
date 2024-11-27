@@ -83,6 +83,7 @@ subroutine band_geo_props_kplane
             open(unit=outfileindex, file='NPHC_int_kplane.dat')
             write(outfileindex, '("# sumover: Fermi ", a15)') option_sumover
             write(outfileindex, '("# unit: (e^2)/hbar * Angstorm^3 * (Ohm * V * T)^-1 ")') 
+            ! write(outfileindex, '("#",1a11, 2a12, 17a20)') "kx(1/A)", "ky(1/A)", "kz(1/A)", '\Upsilon_{xyyy}', '\Upsilon_{yxxx}', '\Upsilon_{xyyx}', '\Upsilon_{yxxy}' 
             write(outfileindex, '("#",1a11, 2a12, 17a20)') "kx(1/A)", "ky(1/A)", "kz(1/A)", '\Upsilon_{xyyy}', '\Upsilon_{yxxx}', '\Upsilon_{xyyx}', '\Upsilon_{yxxy}' 
         case ("SHC")
             open(unit=outfileindex, file='SHC_kplane.dat')
@@ -204,10 +205,10 @@ subroutine NPHC_int_dist_single_k_Ef(k_in, props)
     real(dp), intent(out) :: props(6)
     integer  :: sum_end
 
-    real(dp), allocatable :: Chi_xyyy_k         (:,:,:,:)
-    real(dp), allocatable :: Chi_yxxx_k         (:,:,:,:)
-    real(dp), allocatable :: Chi_xyyx_k         (:,:,:,:)
-    real(dp), allocatable :: Chi_yxxy_k         (:,:,:,:)
+    real(dp), allocatable :: Chi_xyyy_k         (:,:)
+    real(dp), allocatable :: Chi_yxxx_k         (:,:)
+    real(dp), allocatable :: Chi_xyyx_k         (:,:)
+    real(dp), allocatable :: Chi_yxxy_k         (:,:)
 
     complex(dp), allocatable :: M_S(:, :, :) !> spin magnetic moments
     complex(dp), allocatable :: M_L(:, :, :) !> orbital magnetic moments
@@ -215,7 +216,7 @@ subroutine NPHC_int_dist_single_k_Ef(k_in, props)
     real(dp) :: k_dkx(3)
     real(dp) :: k_dky(3)
     
-    real(dp), allocatable :: diffFermi(:)
+    real(dp) :: diffFermi, M_S_k(3), M_L_k(3)
 
     ! eigen value of H
     real(dp),    allocatable :: W(:)
@@ -242,13 +243,11 @@ subroutine NPHC_int_dist_single_k_Ef(k_in, props)
     real(dp) :: G_xx, G_xy, G_yx, G_yy, G_yy_dkx, G_xy_dky, G_xx_dky, G_yx_dkx
     real(dp) :: dEnm, dEnm3, dEml, dEnl
 
-    allocate( Chi_xyyy_k         (OmegaNum, Eta_number,2,2))
-    allocate( Chi_yxxx_k         (OmegaNum, Eta_number,2,2))
-    allocate( Chi_xyyx_k         (OmegaNum, Eta_number,2,2))
-    allocate( Chi_yxxy_k         (OmegaNum, Eta_number,2,2))
+    allocate( Chi_xyyy_k         (2,2))
+    allocate( Chi_yxxx_k         (2,2))
+    allocate( Chi_xyyx_k         (2,2))
+    allocate( Chi_yxxy_k         (2,2))
     
-    allocate( diffFermi (OmegaNum))
-
     !===========================================================================
     !> original kpoints
     allocate( W (Num_wann))
@@ -320,6 +319,8 @@ subroutine NPHC_int_dist_single_k_Ef(k_in, props)
     Chi_yxxx_k = 0d0
     Chi_xyyx_k = 0d0
     Chi_yxxy_k = 0d0
+    M_S_k = 0d0
+    M_L_k = 0d0
 
     if (option_sumover=='sea') then ! 'sea'=Fermi sea
         sum_end = Numoccupied
@@ -453,39 +454,51 @@ subroutine NPHC_int_dist_single_k_Ef(k_in, props)
 
         ieta = 1
         if (include_m_spin) then
-            Chi_xyyy_k(:,ieta, 1, 1) = Chi_xyyy_k(:,ieta, 1, 1) + real( (vx(n,n)*Lambda_yyy_S - vy(n,n)*Lambda_xyy_S) ) * diffFermi
-            Chi_xyyy_k(:,ieta, 1, 2) = Chi_xyyy_k(:,ieta, 1, 2) + real( ((G_yy_dkx - G_yy)/dkx - (G_xy_dky - G_xy)/dky)*sy(n,n) ) * diffFermi
+            Chi_xyyy_k(1, 1) = Chi_xyyy_k(1, 1) + real( (vx(n,n)*Lambda_yyy_S - vy(n,n)*Lambda_xyy_S) ) * diffFermi
+            Chi_xyyy_k(1, 2) = Chi_xyyy_k(1, 2) + real( ((G_yy_dkx - G_yy)/dkx - (G_xy_dky - G_xy)/dky)*sy(n,n) ) * diffFermi
 
-            Chi_yxxx_k(:,ieta, 1, 1) = Chi_yxxx_k(:,ieta, 1, 1) + real( (vy(n,n)*Lambda_xxx_S - vx(n,n)*Lambda_yxx_S) ) * diffFermi
-            Chi_yxxx_k(:,ieta, 1, 2) = Chi_yxxx_k(:,ieta, 1, 2) + real( ((G_xx_dky - G_xx)/dky - (G_yx_dkx - G_yx)/dkx)*sx(n,n) ) * diffFermi
+            Chi_yxxx_k(1, 1) = Chi_yxxx_k(1, 1) + real( (vy(n,n)*Lambda_xxx_S - vx(n,n)*Lambda_yxx_S) ) * diffFermi
+            Chi_yxxx_k(1, 2) = Chi_yxxx_k(1, 2) + real( ((G_xx_dky - G_xx)/dky - (G_yx_dkx - G_yx)/dkx)*sx(n,n) ) * diffFermi
 
-            Chi_xyyx_k(:,ieta, 1, 1) = Chi_xyyx_k(:,ieta, 1, 1) + real( (vx(n,n)*Lambda_yyx_S - vy(n,n)*Lambda_xyx_S) ) * diffFermi
-            Chi_xyyx_k(:,ieta, 1, 2) = Chi_xyyx_k(:,ieta, 1, 2) + real( ((G_yy_dkx - G_yy)/dkx - (G_xy_dky - G_xy)/dky)*sx(n,n) ) * diffFermi
+            Chi_xyyx_k(1, 1) = Chi_xyyx_k(1, 1) + real( (vx(n,n)*Lambda_yyx_S - vy(n,n)*Lambda_xyx_S) ) * diffFermi
+            Chi_xyyx_k(1, 2) = Chi_xyyx_k(1, 2) + real( ((G_yy_dkx - G_yy)/dkx - (G_xy_dky - G_xy)/dky)*sx(n,n) ) * diffFermi
 
-            Chi_yxxy_k(:,ieta, 1, 1) = Chi_yxxy_k(:,ieta, 1, 1) + real( (vy(n,n)*Lambda_xxy_S - vx(n,n)*Lambda_yxy_S) ) * diffFermi
-            Chi_yxxy_k(:,ieta, 1, 2) = Chi_yxxy_k(:,ieta, 1, 2) + real( ((G_xx_dky - G_xx)/dky - (G_yx_dkx - G_yx)/dkx)*sy(n,n) ) * diffFermi
+            Chi_yxxy_k(1, 1) = Chi_yxxy_k(1, 1) + real( (vy(n,n)*Lambda_xxy_S - vx(n,n)*Lambda_yxy_S) ) * diffFermi
+            Chi_yxxy_k(1, 2) = Chi_yxxy_k(1, 2) + real( ((G_xx_dky - G_xx)/dky - (G_yx_dkx - G_yx)/dkx)*sy(n,n) ) * diffFermi
+            
+            M_S_k = M_S_k + [real(sx(n, n)), real(sy(n, n)), 0d0]
         endif
         if (include_m_orb) then
-            Chi_xyyy_k(:,ieta, 2, 1) = Chi_xyyy_k(:,ieta, 2, 1) + real( (vx(n,n)*Lambda_yyy_L - vy(n,n)*Lambda_xyy_L) ) * diffFermi
-            Chi_xyyy_k(:,ieta, 2, 2) = Chi_xyyy_k(:,ieta, 2, 2) + real( ((G_yy_dkx - G_yy)/dkx - (G_xy_dky - G_xy)/dky)*ly(n,n) ) * diffFermi
+            Chi_xyyy_k(2, 1) = Chi_xyyy_k(2, 1) + real( (vx(n,n)*Lambda_yyy_L - vy(n,n)*Lambda_xyy_L) ) * diffFermi
+            Chi_xyyy_k(2, 2) = Chi_xyyy_k(2, 2) + real( ((G_yy_dkx - G_yy)/dkx - (G_xy_dky - G_xy)/dky)*ly(n,n) ) * diffFermi
 
-            Chi_yxxx_k(:,ieta, 2, 1) = Chi_yxxx_k(:,ieta, 2, 1) + real( (vy(n,n)*Lambda_xxx_L - vx(n,n)*Lambda_yxx_L) ) * diffFermi
-            Chi_yxxx_k(:,ieta, 2, 2) = Chi_yxxx_k(:,ieta, 2, 2) + real( ((G_xx_dky - G_xx)/dky - (G_yx_dkx - G_yx)/dkx)*lx(n,n) ) * diffFermi
+            Chi_yxxx_k(2, 1) = Chi_yxxx_k(2, 1) + real( (vy(n,n)*Lambda_xxx_L - vx(n,n)*Lambda_yxx_L) ) * diffFermi
+            Chi_yxxx_k(2, 2) = Chi_yxxx_k(2, 2) + real( ((G_xx_dky - G_xx)/dky - (G_yx_dkx - G_yx)/dkx)*lx(n,n) ) * diffFermi
 
-            Chi_xyyx_k(:,ieta, 2, 1) = Chi_xyyx_k(:,ieta, 2, 1) + real( (vx(n,n)*Lambda_yyx_L - vy(n,n)*Lambda_xyx_L) ) * diffFermi
-            Chi_xyyx_k(:,ieta, 2, 2) = Chi_xyyx_k(:,ieta, 2, 2) + real( ((G_yy_dkx - G_yy)/dkx - (G_xy_dky - G_xy)/dky)*lx(n,n) ) * diffFermi
+            Chi_xyyx_k(2, 1) = Chi_xyyx_k(2, 1) + real( (vx(n,n)*Lambda_yyx_L - vy(n,n)*Lambda_xyx_L) ) * diffFermi
+            Chi_xyyx_k(2, 2) = Chi_xyyx_k(2, 2) + real( ((G_yy_dkx - G_yy)/dkx - (G_xy_dky - G_xy)/dky)*lx(n,n) ) * diffFermi
 
-            Chi_yxxy_k(:,ieta, 2, 1) = Chi_yxxy_k(:,ieta, 2, 1) + real( (vy(n,n)*Lambda_xxy_L - vx(n,n)*Lambda_yxy_L) ) * diffFermi
-            Chi_yxxy_k(:,ieta, 2, 2) = Chi_yxxy_k(:,ieta, 2, 2) + real( ((G_xx_dky - G_xx)/dky - (G_yx_dkx - G_yx)/dkx)*ly(n,n) ) * diffFermi
+            Chi_yxxy_k(2, 1) = Chi_yxxy_k(2, 1) + real( (vy(n,n)*Lambda_xxy_L - vx(n,n)*Lambda_yxy_L) ) * diffFermi
+            Chi_yxxy_k(2, 2) = Chi_yxxy_k(2, 2) + real( ((G_xx_dky - G_xx)/dky - (G_yx_dkx - G_yx)/dkx)*ly(n,n) ) * diffFermi
+
+            M_L_k = M_L_k + [real(lx(n, n)), real(ly(n, n)), 0d0]
         endif
     enddo ! n
 
-    props(1) = sum(Chi_xyyy_k(1,1,:,:))
-    props(2) = sum(Chi_yxxx_k(1,1,:,:))
-    props(3) = sum(Chi_xyyx_k(1,1,:,:))
-    props(4) = sum(Chi_yxxy_k(1,1,:,:))
-    props(5) = 0d0
-    props(6) = 0d0
+    ! props(1) = sum(Chi_xyyy_k(:,:))
+    ! props(2) = sum(Chi_yxxx_k(:,:))
+    ! props(3) = sum(Chi_xyyx_k(:,:))
+    ! props(4) = sum(Chi_yxxy_k(:,:))
+    ! props(5) = 0d0
+    ! props(6) = 0d0
+
+    props(1) = Chi_xyyx_k(1,1)
+    props(2) = Chi_xyyx_k(1,2)
+    props(3) = Chi_xyyx_k(2,1)
+    props(4) = Chi_xyyx_k(2,2)
+    props(5) = M_L_k(1)
+    props(6) = M_L_k(2)
+
 
     props = props * (Echarge/Hartree2J * mu_B) / (Ang2Bohr)**3
 

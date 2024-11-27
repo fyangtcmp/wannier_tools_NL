@@ -33,7 +33,7 @@ ARPACK=/usr/local/lib/libarpack.a
 		  ${ARPACK}
 
 # dynamic linking
-LIBS = ${ARPACK} -L/${MKLROOT}/lib/intel64 -lmkl_blas95_lp64 -lmkl_core -lmkl_sequential -lmkl_intel_lp64 -lpthread
+LIBS = ${ARPACK} -L/${MKLROOT}/lib/intel64 -lmkl_core -lmkl_sequential -lmkl_intel_lp64 -lpthread
  
 main : $(OBJ)
 	$(F90) $(LFLAG) $(OBJ) -o wt.x $(LIBS)

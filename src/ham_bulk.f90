@@ -294,7 +294,6 @@ subroutine ham_bulk_latticegauge(k,Hamk_bulk)
 end subroutine ham_bulk_latticegauge
 
 subroutine velocity_latticegauge_simple(k_in, UU, velocities) !> dH_dk, without 1/hbar
-   use BLAS95, only: zgemm_f95
    use para, only: dp, Num_wann
    implicit none
 
@@ -310,12 +309,12 @@ subroutine velocity_latticegauge_simple(k_in, UU, velocities) !> dH_dk, without 
 
    UU_dag= conjg(transpose(UU))
    !> unitility rotate velocity
-   call zgemm_f95( velocities(:,:,1), UU, Amat)
-   call zgemm_f95( UU_dag, Amat, velocities(:,:,1))
-   call zgemm_f95( velocities(:,:,2), UU, Amat)
-   call zgemm_f95( UU_dag, Amat, velocities(:,:,2))
-   call zgemm_f95( velocities(:,:,3), UU, Amat)
-   call zgemm_f95( UU_dag, Amat, velocities(:,:,3))
+   call mat_mul(Num_wann, velocities(:,:,1), UU, Amat)
+   call mat_mul(Num_wann, UU_dag, Amat, velocities(:,:,1))
+   call mat_mul(Num_wann, velocities(:,:,2), UU, Amat)
+   call mat_mul(Num_wann, UU_dag, Amat, velocities(:,:,2))
+   call mat_mul(Num_wann, velocities(:,:,3), UU, Amat)
+   call mat_mul(Num_wann, UU_dag, Amat, velocities(:,:,3))
 
 end subroutine velocity_latticegauge_simple
 

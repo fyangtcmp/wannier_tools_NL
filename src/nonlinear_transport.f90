@@ -154,33 +154,32 @@ contains
         sigma_xyy_k        = 0d0
         sigma_yxx_k        = 0d0
 
-        do m= 1, Num_wann
+        do n= 1, Num_wann
             !> At room temperature, the derivatives of the Fermi-Dirac distribution
             !> at (E-Ef)=0.5 is seven orders smaller than (E-Ef)=0.1.
             !> So we choose the energy truncation as [-0.5eV 0.5eV]*eV2Hartree,
             !> it will not affect the precsion and will accelerate the calculations
-            if (W(m)<OmegaMin- 2.d-2 .or. W(m)>OmegaMax+ 2.d-2) cycle
+            if (W(n)<OmegaMin- 2.d-2 .or. W(n)>OmegaMax+ 2.d-2) cycle
 
             !> calculate G for each band
             G_xx=0d0; G_xy=0d0; G_yx=0d0; G_yy=0d0
 
-            do n= 1, Num_wann
+            do m= 1, Num_wann
                 if (ABS(W(m)-W(n)) < band_degeneracy_threshold) cycle
-                G_xx= G_xx+ 2.d0*real(vx(m, n)*vx(n, m)/((W(m)-W(n))**3))
-                G_xy= G_xy+ 2.d0*real(vx(m, n)*vy(n, m)/((W(m)-W(n))**3))
-                G_yx= G_yx+ 2.d0*real(vy(m, n)*vx(n, m)/((W(m)-W(n))**3))
-                G_yy= G_yy+ 2.d0*real(vy(m, n)*vy(n, m)/((W(m)-W(n))**3))
-            enddo ! n
+                G_xx= G_xx+ 2.d0*real(vx(n,m)*vx(m,n)/((W(n)-W(m))**3))
+                G_xy= G_xy+ 2.d0*real(vx(n,m)*vy(m,n)/((W(n)-W(m))**3))
+                G_yx= G_yx+ 2.d0*real(vy(n,m)*vx(m,n)/((W(n)-W(m))**3))
+                G_yy= G_yy+ 2.d0*real(vy(n,m)*vy(m,n)/((W(n)-W(m))**3))
+            enddo ! m
 
             do ieta=1, Eta_number
-                !> the outmost band index is m here
                 !> this format is very important! prevent NaN error
-                diffFermi = -1d0 / (Exp((W(m) - energy)/Eta_array(ieta))+1d0) / (Exp(-(W(m) - energy)/Eta_array(ieta))+1d0) / Eta_array(ieta)
+                diffFermi = -1d0 / (Exp((W(n) - energy)/Eta_array(ieta))+1d0) / (Exp(-(W(n) - energy)/Eta_array(ieta))+1d0) / Eta_array(ieta)
 
-                sigma_xyy_k(:,ieta)= sigma_xyy_k(:,ieta) + (G_yy*real(vx(m,m))-G_xy*real(vy(m,m)))*diffFermi
-                sigma_yxx_k(:,ieta)= sigma_yxx_k(:,ieta) + (G_xx*real(vy(m,m))-G_yx*real(vx(m,m)))*diffFermi
+                sigma_xyy_k(:,ieta)= sigma_xyy_k(:,ieta) + (G_yy*real(vx(n,n))-G_xy*real(vy(n,n)))*diffFermi
+                sigma_yxx_k(:,ieta)= sigma_yxx_k(:,ieta) + (G_xx*real(vy(n,n))-G_yx*real(vx(n,n)))*diffFermi
             enddo ! ieta
-        enddo ! m
+        enddo ! n
     
     end subroutine sigma_SOAHC_int_single_k
 

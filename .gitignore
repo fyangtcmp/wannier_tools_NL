@@ -1,9 +1,10 @@
 *~
 */*.o
+*/*.asv
 */*.mod
 */*~
 */*/*~
 src.zip
-benchmarks/
 postprocess/
-src_cuda/
+benchmarks/
+backup/

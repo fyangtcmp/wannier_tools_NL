@@ -96,7 +96,6 @@ contains
     subroutine orbital_operators(UU, W, velocities, M_L_oper) 
         !> output M_L, without unit
 
-        use BLAS95, only: zgemm_f95
         implicit none
 
         complex(dp), intent(in)  :: UU(Num_wann, Num_wann)
@@ -112,12 +111,12 @@ contains
         M_L_oper = 0d0
         UU_dag= conjg(transpose(UU))
 
-        call zgemm_f95(UU, M_L(:,:,1), Amat)
-        call zgemm_f95(Amat, UU_dag, M_L_oper(:,:,1))
-        call zgemm_f95(UU, M_L(:,:,2), Amat)
-        call zgemm_f95(Amat, UU_dag, M_L_oper(:,:,2))
-        call zgemm_f95(UU, M_L(:,:,3), Amat)
-        call zgemm_f95(Amat, UU_dag, M_L_oper(:,:,3))
+        call mat_mul(Num_wann, UU, M_L(:,:,1), Amat)
+        call mat_mul(Num_wann, Amat, UU_dag, M_L_oper(:,:,1))
+        call mat_mul(Num_wann, UU, M_L(:,:,2), Amat)
+        call mat_mul(Num_wann, Amat, UU_dag, M_L_oper(:,:,2))
+        call mat_mul(Num_wann, UU, M_L(:,:,3), Amat)
+        call mat_mul(Num_wann, Amat, UU_dag, M_L_oper(:,:,3))
                 
         M_L_oper = M_L_oper / mu_B / Lande_g_L
     end subroutine orbital_operators
