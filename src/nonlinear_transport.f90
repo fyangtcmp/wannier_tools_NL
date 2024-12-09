@@ -147,7 +147,7 @@ contains
         UU=Hamk_bulk
         call eigensystem_c( 'V', 'U', Num_wann, UU, W)
     
-        call velocity_latticegauge_simple(k_in, UU, velocities)
+        call dHdk_latticegauge_Ham(k_in, W, UU, velocities)
         vx = velocities(:,:,1)
         vy = velocities(:,:,2)
 
@@ -215,35 +215,42 @@ contains
         real(dp), allocatable :: W_dkx(:)
         real(dp), allocatable :: W_dky(:)
     
-        complex(dp), allocatable :: vx(:, :), vy(:, :)
-        complex(dp), allocatable :: velocities(:,:,:)
-    
-        complex(dp), allocatable :: vx_dkx(:, :), vy_dkx(:, :)  
-        complex(dp), allocatable :: vx_dky(:, :), vy_dky(:, :) 
+        complex(dp), allocatable :: velocities(:,:,:), velocities_dkx(:,:,:), velocities_dky(:,:,:)
     
         real(dp) :: G_xx, G_xy, G_yx, G_yy, G_yy_dkx, G_xy_dky, G_xx_dky, G_yx_dkx
         real(dp) :: dEnm, dEnm3, dEml, dEnl
         
         allocate( diffFermi (OmegaNum))
-
-        !===========================================================================
-        !> original kpoints
-        allocate( W (Num_wann))
+        allocate( velocities(Num_wann, Num_wann, 3), velocities_dkx(Num_wann, Num_wann, 3), velocities_dky(Num_wann, Num_wann, 3))
+        allocate( W(Num_wann), W_dkx(Num_wann), W_dky(Num_wann))
         allocate( Hamk_bulk (Num_wann, Num_wann))
         allocate( UU (Num_wann, Num_wann))
+        
+        !> k + dkx <==============================================================
+        k_dkx = k_in+(/Origin_cell%Rua(1)*dkx , Origin_cell%Rub(1)*dkx , Origin_cell%Ruc(1)*dkx/)/twopi
     
-        allocate( velocities(Num_wann, Num_wann, 3))
-        allocate( vx(Num_wann, Num_wann), vy(Num_wann, Num_wann))
+        call ham_bulk_latticegauge(k_dkx, Hamk_bulk)
+        UU=Hamk_bulk
+        call eigensystem_c( 'V', 'U', Num_wann, UU, W_dkx)
+        call dHdk_latticegauge_Ham(k_dkx, W_dkx, UU, velocities_dkx)
+        !==========================================================================
     
+        !> k + dky <===============================================================
+        k_dky = k_in+(/Origin_cell%Rua(2)*dky , Origin_cell%Rub(2)*dky , Origin_cell%Ruc(2)*dky/)/twopi
+    
+        call ham_bulk_latticegauge(k_dky, Hamk_bulk)
+        UU=Hamk_bulk
+        call eigensystem_c( 'V', 'U', Num_wann, UU, W_dky)
+        call dHdk_latticegauge_Ham(k_dky, W_dky, UU, velocities_dky)
+        !===========================================================================
+
+        !> original kpoints <=======================================================
         call ham_bulk_latticegauge(k_in, Hamk_bulk)
         UU=Hamk_bulk
         call eigensystem_c( 'V', 'U', Num_wann, UU, W)
-        ! call dHdk_latticegauge_Ham(k_in, W, UU, velocities)
-        call velocity_latticegauge_simple(k_in, UU, velocities)
-        vx = velocities(:,:,1)
-        vy = velocities(:,:,2)
-    
+        call dHdk_latticegauge_Ham(k_in, W, UU, velocities)
         !===========================================================================
+
         !> magnetic operators 
         allocate( M_S(Num_wann, Num_wann,3) )
         allocate( M_L(Num_wann, Num_wann,3) )
@@ -256,36 +263,6 @@ contains
         if (include_m_orb) then
             call orbital_magnetic_moments(W, velocities, M_L)
         endif
-    
-        !> k + dk_x <===============================================================
-        allocate( W_dkx (Num_wann))   
-        allocate( vx_dkx(Num_wann, Num_wann), vy_dkx(Num_wann, Num_wann))
-    
-        k_dkx = k_in+(/Origin_cell%Rua(1)*dkx , Origin_cell%Rub(1)*dkx , Origin_cell%Ruc(1)*dkx/)/twopi
-    
-        call ham_bulk_latticegauge(k_dkx, Hamk_bulk)
-        UU=Hamk_bulk
-        call eigensystem_c( 'V', 'U', Num_wann, UU, W_dkx)
-        ! call dHdk_latticegauge_Ham(k_dkx, W_dkx, UU, velocities)
-        call velocity_latticegauge_simple(k_dkx, UU, velocities)
-        vx_dkx = velocities(:,:,1)
-        vy_dkx = velocities(:,:,2)
-        !===========================================================================
-    
-        !> k + dk_y <===============================================================
-        allocate( W_dky (Num_wann))
-        allocate( vx_dky(Num_wann, Num_wann), vy_dky(Num_wann, Num_wann))
-    
-        k_dky = k_in+(/Origin_cell%Rua(2)*dky , Origin_cell%Rub(2)*dky , Origin_cell%Ruc(2)*dky/)/twopi
-    
-        call ham_bulk_latticegauge(k_dky, Hamk_bulk)
-        UU=Hamk_bulk
-        call eigensystem_c( 'V', 'U', Num_wann, UU, W_dky)
-        ! call dHdk_latticegauge_Ham(k_dky, W_dky, UU, velocities)
-        call velocity_latticegauge_simple(k_dky, UU, velocities)
-        vx_dky = velocities(:,:,1)
-        vy_dky = velocities(:,:,2)
-        !===========================================================================
     
         Chi_xyyy_k = 0d0
         Chi_yxxx_k = 0d0
@@ -311,16 +288,16 @@ contains
                 if (ABS(dEnm) < band_degeneracy_threshold) cycle
     
                 dEnm3= dEnm**3
-                G_xx= G_xx+ 2.d0*real( vx(n, m)*vx(m, n) )/dEnm3
-                G_xy= G_xy+ 2.d0*real( vx(n, m)*vy(m, n) )/dEnm3
-                G_yx= G_yx+ 2.d0*real( vy(n, m)*vx(m, n) )/dEnm3
-                G_yy= G_yy+ 2.d0*real( vy(n, m)*vy(m, n) )/dEnm3
+                G_xx= G_xx+ 2.d0*real( velocities(n,m,1)*velocities(m,n,1) )/dEnm3
+                G_xy= G_xy+ 2.d0*real( velocities(n,m,1)*velocities(m,n,2) )/dEnm3
+                G_yx= G_yx+ 2.d0*real( velocities(n,m,2)*velocities(m,n,1) )/dEnm3
+                G_yy= G_yy+ 2.d0*real( velocities(n,m,2)*velocities(m,n,1) )/dEnm3
     
-                G_yy_dkx= G_yy_dkx + 2.d0*real( vy_dkx(n, m)*vy_dkx(m, n) )/(W_dkx(n) - W_dkx(m))**3
-                G_yx_dkx= G_yx_dkx + 2.d0*real( vy_dkx(n, m)*vx_dkx(m, n) )/(W_dkx(n) - W_dkx(m))**3
+                G_yy_dkx= G_yy_dkx + 2.d0*real( velocities_dkx(n,m,2)*velocities_dkx(m,n,2) )/(W_dkx(n) - W_dkx(m))**3
+                G_yx_dkx= G_yx_dkx + 2.d0*real( velocities_dkx(n,m,2)*velocities_dkx(m,n,1) )/(W_dkx(n) - W_dkx(m))**3
                 
-                G_xy_dky= G_xy_dky + 2.d0*real( vx_dky(n, m)*vy_dky(m, n) )/(W_dky(n) - W_dky(m))**3
-                G_xx_dky= G_xx_dky + 2.d0*real( vx_dky(n, m)*vx_dky(m, n) )/(W_dky(n) - W_dky(m))**3
+                G_xy_dky= G_xy_dky + 2.d0*real( velocities_dky(n,m,1)*velocities_dky(m,n,2) )/(W_dky(n) - W_dky(m))**3
+                G_xx_dky= G_xx_dky + 2.d0*real( velocities_dky(n,m,1)*velocities_dky(m,n,1) )/(W_dky(n) - W_dky(m))**3
     
                 do L1 = 1,2
                     do L2 = 1,2
@@ -331,31 +308,31 @@ contains
                     enddo
                 enddo
                     
-                    do l= 1, Num_wann
-                        dEnl= W(n)-W(l)
-                        dEml= W(m)-W(l)                
-                        if (ABS(dEnl) > band_degeneracy_threshold) then
-                            do L1 = 1,2
-                                do L2 = 1,2
-                                    do L3 = 1,2
-                                        Lambda_S(L1,L2,L3) = Lambda_S(L1,L2,L3) - 2.d0* real( (velocities(l,m,L1)*velocities(m,n,L2) + velocities(l,m,L2)*velocities(m,n,L1))* M_S(n,l,L3) )/dEnm3/dEnl
-                                        Lambda_L(L1,L2,L3) = Lambda_L(L1,L2,L3) - 2.d0* real( (velocities(l,m,L1)*velocities(m,n,L2) + velocities(l,m,L2)*velocities(m,n,L1))* M_L(n,l,L3) )/dEnm3/dEnl
-                                    enddo
+                do l= 1, Num_wann
+                    dEnl= W(n)-W(l)
+                    dEml= W(m)-W(l)                
+                    if (ABS(dEnl) > band_degeneracy_threshold) then
+                        do L1 = 1,2
+                            do L2 = 1,2
+                                do L3 = 1,2
+                                    Lambda_S(L1,L2,L3) = Lambda_S(L1,L2,L3) - 2.d0* real( (velocities(l,m,L1)*velocities(m,n,L2) + velocities(l,m,L2)*velocities(m,n,L1))* M_S(n,l,L3) )/dEnm3/dEnl
+                                    Lambda_L(L1,L2,L3) = Lambda_L(L1,L2,L3) - 2.d0* real( (velocities(l,m,L1)*velocities(m,n,L2) + velocities(l,m,L2)*velocities(m,n,L1))* M_L(n,l,L3) )/dEnm3/dEnl
                                 enddo
                             enddo
-                        endif
-                        if (ABS(dEml) > band_degeneracy_threshold) then
-                            do L1 = 1,2
-                                do L2 = 1,2
-                                    do L3 = 1,2
-                                        Lambda_S(L1,L2,L3) = Lambda_S(L1,L2,L3) - 2.d0* real( (velocities(l,n,L1)*velocities(n,m,L2) + velocities(l,n,L2)*velocities(n,m,L1)) * M_S(m,l,L3) )/dEnm3/dEml
-                                        Lambda_L(L1,L2,L3) = Lambda_L(L1,L2,L3) - 2.d0* real( (velocities(l,n,L1)*velocities(n,m,L2) + velocities(l,n,L2)*velocities(n,m,L1)) * M_L(m,l,L3) )/dEnm3/dEml
-                                    enddo
+                        enddo
+                    endif
+                    if (ABS(dEml) > band_degeneracy_threshold) then
+                        do L1 = 1,2
+                            do L2 = 1,2
+                                do L3 = 1,2
+                                    Lambda_S(L1,L2,L3) = Lambda_S(L1,L2,L3) - 2.d0* real( (velocities(l,n,L1)*velocities(n,m,L2) + velocities(l,n,L2)*velocities(n,m,L1)) * M_S(m,l,L3) )/dEnm3/dEml
+                                    Lambda_L(L1,L2,L3) = Lambda_L(L1,L2,L3) - 2.d0* real( (velocities(l,n,L1)*velocities(n,m,L2) + velocities(l,n,L2)*velocities(n,m,L1)) * M_L(m,l,L3) )/dEnm3/dEml
                                 enddo
                             enddo
-                        endif
+                        enddo
+                    endif
 
-                    enddo ! l
+                enddo ! l
             enddo ! m
 
             do ieta=1, Eta_number
@@ -448,7 +425,7 @@ contains
         call ham_bulk_latticegauge(k_dkx, Hamk_bulk)
         UU=Hamk_bulk
         call eigensystem_c( 'V', 'U', Num_wann, UU, W)
-        call velocity_latticegauge_simple(k_dkx, UU, v_dx)
+        call dHdk_latticegauge_Ham(k_dkx, W, UU, v_dx)
 
         if (include_m_spin) then
             call spin_magnetic_moments(UU, M_S_dx)
@@ -464,7 +441,7 @@ contains
         call ham_bulk_latticegauge(k_dky, Hamk_bulk)
         UU=Hamk_bulk
         call eigensystem_c( 'V', 'U', Num_wann, UU, W)
-        call velocity_latticegauge_simple(k_dky, UU, v_dy)
+        call dHdk_latticegauge_Ham(k_dky, W, UU, v_dy)
 
         if (include_m_spin) then
             call spin_magnetic_moments(UU, M_S_dy)
@@ -477,7 +454,7 @@ contains
         call ham_bulk_latticegauge(k_in, Hamk_bulk)
         UU=Hamk_bulk
         call eigensystem_c( 'V', 'U', Num_wann, UU, W)
-        call velocity_latticegauge_simple(k_in, UU, v0)
+        call dHdk_latticegauge_Ham(k_in, W, UU, v0)
 
         if (include_m_spin) then
             call spin_magnetic_moments(UU, M_S)
@@ -570,7 +547,7 @@ contains
         call ham_bulk_latticegauge(k_in, Hamk_bulk)
         UU=Hamk_bulk
         call eigensystem_c( 'V', 'U', Num_wann, UU, W)
-        call velocity_latticegauge_simple(k_in, UU, velocities)
+        call dHdk_latticegauge_Ham(k_in, W, UU, velocities)
         vx = velocities(:,:,1)
         vy = velocities(:,:,2)
     
@@ -832,10 +809,10 @@ subroutine drude_weight
 
     call now(time_start)
     do ik= 1+ cpuid, knv3, num_cpu
-        if (cpuid.eq.0 .and. mod(ik/num_cpu, 2000).eq.0) then
+        if (cpuid.eq.0 .and. mod(ik/num_cpu, 400).eq.0) then
             call now(time_end)
             write(stdout, '(a, i18, "/", i18, a, f10.2, "min")') 'ik/knv3', &
-                ik, knv3, '  time left', (knv3-ik)*(time_end-time_start)/num_cpu/2000d0/60d0
+                ik, knv3, '  time left', (knv3-ik)*(time_end-time_start)/num_cpu/400d0/60d0
             time_start= time_end
         endif
 
@@ -952,10 +929,10 @@ subroutine sigma_NPHC_int ! dynamical mpi, auto adapted k-mesh
     if (cpuid==0) then ! dispatcher
         call now(time_start)
         do ik= 1, (knv3+num_cpu-1)
-            if (mod(ik, 2000*(num_cpu-1))==0) then
+            if (mod(ik, 400*(num_cpu-1))==0) then
                 call now(time_end)
                 write(stdout, '(a, i18, "/", i18, a, f10.2, "min")') 'ik/knv3', &
-                    ik, knv3, '  time left', (knv3-ik)*(time_end-time_start)/(num_cpu-1)/2000d0/60d0
+                    ik, knv3, '  time left', (knv3-ik)*(time_end-time_start)/(num_cpu-1)/400d0/60d0
                 time_start= time_end
             endif
     
@@ -987,10 +964,10 @@ subroutine sigma_NPHC_int ! dynamical mpi, auto adapted k-mesh
         call get_ik_adapt_list()
         call now(time_start)
         do ik2= 1, (Nk_adapt+num_cpu-1)
-            if (mod(ik2, 200*(num_cpu-1))==0) then
+            if (mod(ik2, 400*(num_cpu-1))==0) then
                 call now(time_end)
                 write(stdout, '(a, i18, "/", i18, a, f10.2, "min")') 'ik/Nk_adapt', &
-                    ik2, Nk_adapt, '  time left', (Nk_adapt-ik2)*(time_end-time_start)/(num_cpu-1)/200d0/60d0
+                    ik2, Nk_adapt, '  time left', (Nk_adapt-ik2)*(time_end-time_start)/(num_cpu-1)/400d0/60d0
                 time_start= time_end
             endif
 
@@ -1047,39 +1024,22 @@ subroutine sigma_NPHC_int ! dynamical mpi, auto adapted k-mesh
         do ieta=1, Eta_number
             write(Eta_name, '(f12.2)') Eta_array(ieta)*1000d0/eV2Hartree
 
-            if (include_m_spin) then
-                write(ahcfilename, '(7a)')'sigma_NPHC_int_S_eta', trim(adjustl(Eta_name)), 'meV.dat'
-                open(unit=outfileindex, file=ahcfilename)
-                write(outfileindex, '("#",a)')' Intrinsic nonlinear planar hall effect, in unit of A*V^-2*T^-1 for 3D case, Ang*A*V^-2*T^-1 for 2D cases'
-                write(outfileindex, '("#",a)')' Please refer to the Sec. III of the supplementary materials of 10.1103/PhysRevLett.130.126303, for the definition of term I and term II of the INPHE conductivities'
+            write(ahcfilename, '(7a)')'sigma_NPHC_int_eta', trim(adjustl(Eta_name)), 'meV.dat'
+            open(unit=outfileindex, file=ahcfilename)
+            write(outfileindex, '("#",a)')' Intrinsic nonlinear planar hall effect, in unit of A*V^-2*T^-1 for 3D case, Ang*A*V^-2*T^-1 for 2D cases'
+            write(outfileindex, '("#",a)')' Please refer to the Sec. III of the supplementary materials of 10.1103/PhysRevLett.130.126303, for the definition of term I and term II of the INPHE conductivities'
 
-                write(outfileindex, '("#",a13, 20a16)')' Energy (eV)', '\chi_{xyyy,I}', '\chi_{xyyy,II}', '\chi_{xyyy}', '\chi_{yxxx,I}', '\chi_{yxxx,II}','\chi_{yxxx}', '\chi_{xyyx,I}', '\chi_{xyyx,II}', '\chi_{xyyx}', '\chi_{yxxy,I}', '\chi_{yxxy,II}','\chi_{yxxy}'
-                do ie=1, OmegaNum
-                    write(outfileindex, '(200E16.8)')energy(ie)/eV2Hartree, &
-                        Chi_xyyy_tensor(ie,ieta,1,1), Chi_xyyy_tensor(ie,ieta,1,2), Chi_xyyy_tensor(ie,ieta,1,1) + Chi_xyyy_tensor(ie,ieta,1,2),&
-                        Chi_yxxx_tensor(ie,ieta,1,1), Chi_yxxx_tensor(ie,ieta,1,2), Chi_yxxx_tensor(ie,ieta,1,1) + Chi_yxxx_tensor(ie,ieta,1,2),&
-                        Chi_xyyx_tensor(ie,ieta,1,1), Chi_xyyx_tensor(ie,ieta,1,2), Chi_xyyx_tensor(ie,ieta,1,1) + Chi_xyyx_tensor(ie,ieta,1,2),&
-                        Chi_yxxy_tensor(ie,ieta,1,1), Chi_yxxy_tensor(ie,ieta,1,2), Chi_yxxy_tensor(ie,ieta,1,1) + Chi_yxxy_tensor(ie,ieta,1,2)
-                enddo
-                close(outfileindex)
-            endif
+            write(outfileindex, '("#", 100a18)')' Energy (eV)', &
+            '\chi^S_{xyyy,I}', '\chi^L_{xyyy,I}', '\chi^S_{xyyy,II}', '\chi^L_{xyyy,II}', &
+            '\chi^S_{yxxx,I}', '\chi^L_{yxxx,I}', '\chi^S_{yxxx,II}', '\chi^L_{yxxx,II}', &
+            '\chi^S_{xyyx,I}', '\chi^L_{xyyx,I}', '\chi^S_{xyyx,II}', '\chi^L_{xyyx,II}', &
+            '\chi^S_{yxxy,I}', '\chi^L_{yxxy,I}', '\chi^S_{yxxy,II}', '\chi^L_{yxxy,II}'
+            do ie=1, OmegaNum
+                write(outfileindex, '(100e18.8)')energy(ie)/eV2Hartree, &
+                    Chi_xyyy_tensor(ie,ieta,:,:), Chi_yxxx_tensor(ie,ieta,:,:), Chi_xyyx_tensor(ie,ieta,:,:), Chi_yxxy_tensor(ie,ieta,:,:)
+            enddo
+            close(outfileindex)
 
-            if (include_m_orb ) then
-                write(ahcfilename, '(7a)')'sigma_NPHC_int_L_eta', trim(adjustl(Eta_name)), 'meV.dat'
-                open(unit=outfileindex, file=ahcfilename)
-                write(outfileindex, '("#",a)')' Intrinsic nonlinear planar hall effect, in unit of A*V^-2*T^-1 for 3D case, Ang*A*V^-2*T^-1 for 2D cases'
-                write(outfileindex, '("#",a)')' Please refer to the Sec. III of the supplementary materials of 10.1103/PhysRevLett.130.126303, for the definition of term I and term II of the INPHE conductivities'
-
-                write(outfileindex, '("#",a13, 20a16)')' Energy (eV)', '\chi_{xyyy,I}', '\chi_{xyyy,II}', '\chi_{xyyy}', '\chi_{yxxx,I}', '\chi_{yxxx,II}','\chi_{yxxx}', '\chi_{xyyx,I}', '\chi_{xyyx,II}', '\chi_{xyyx}', '\chi_{yxxy,I}', '\chi_{yxxy,II}','\chi_{yxxy}'
-                do ie=1, OmegaNum
-                    write(outfileindex, '(200E16.8)')energy(ie)/eV2Hartree, &
-                        Chi_xyyy_tensor(ie,ieta,2,1), Chi_xyyy_tensor(ie,ieta,2,2), Chi_xyyy_tensor(ie,ieta,2,1) + Chi_xyyy_tensor(ie,ieta,2,2),&
-                        Chi_yxxx_tensor(ie,ieta,2,1), Chi_yxxx_tensor(ie,ieta,2,2), Chi_yxxx_tensor(ie,ieta,2,1) + Chi_yxxx_tensor(ie,ieta,2,2),&
-                        Chi_xyyx_tensor(ie,ieta,2,1), Chi_xyyx_tensor(ie,ieta,2,2), Chi_xyyx_tensor(ie,ieta,2,1) + Chi_xyyx_tensor(ie,ieta,2,2),&
-                        Chi_yxxy_tensor(ie,ieta,2,1), Chi_yxxy_tensor(ie,ieta,2,2), Chi_yxxy_tensor(ie,ieta,2,1) + Chi_yxxy_tensor(ie,ieta,2,2)
-                enddo
-                close(outfileindex)
-            endif
         enddo
     endif
 
@@ -1162,10 +1122,10 @@ subroutine sigma_NPHC_tau2 ! dynamical mpi, auto adapted k-mesh
     if (cpuid==0) then ! dispatcher
         call now(time_start)
         do ik= 1, (knv3+num_cpu-1)
-            if (mod(ik, 2000*(num_cpu-1))==0) then
+            if (mod(ik, 400*(num_cpu-1))==0) then
                 call now(time_end)
                 write(stdout, '(a, i18, "/", i18, a, f10.2, "min")') 'ik/knv3', &
-                    ik, knv3, '  time left', (knv3-ik)*(time_end-time_start)/(num_cpu-1)/2000d0/60d0
+                    ik, knv3, '  time left', (knv3-ik)*(time_end-time_start)/(num_cpu-1)/400d0/60d0
                 time_start= time_end
             endif
     
@@ -1197,10 +1157,10 @@ subroutine sigma_NPHC_tau2 ! dynamical mpi, auto adapted k-mesh
         call get_ik_adapt_list()
         call now(time_start)
         do ik2= 1, (Nk_adapt+num_cpu-1)
-            if (mod(ik2, 200*(num_cpu-1))==0) then
+            if (mod(ik2, 400*(num_cpu-1))==0) then
                 call now(time_end)
                 write(stdout, '(a, i18, "/", i18, a, f10.2, "min")') 'ik/Nk_adapt', &
-                    ik2, Nk_adapt, '  time left', (Nk_adapt-ik2)*(time_end-time_start)/(num_cpu-1)/200d0/60d0
+                    ik2, Nk_adapt, '  time left', (Nk_adapt-ik2)*(time_end-time_start)/(num_cpu-1)/400d0/60d0
                 time_start= time_end
             endif
 
@@ -1257,39 +1217,22 @@ subroutine sigma_NPHC_tau2 ! dynamical mpi, auto adapted k-mesh
         do ieta=1, Eta_number
             write(Eta_name, '(f12.2)') Eta_array(ieta)*1000d0/eV2Hartree
 
-            if (include_m_spin) then
-                write(ahcfilename, '(7a)')'sigma_NPHC_tau2_S_eta', trim(adjustl(Eta_name)), 'meV.dat'
-                open(unit=outfileindex, file=ahcfilename)
-                write(outfileindex, '("#",a)')' tau2 nonlinear planar hall effect, in unit of A*V^-2*T^-1 for 3D case, Ang*A*V^-2*T^-1 for 2D cases'
-                write(outfileindex, '("#",a)')' Without Tau'
+            write(ahcfilename, '(7a)')'sigma_NPHC_tau2_eta', trim(adjustl(Eta_name)), 'meV.dat'
+            open(unit=outfileindex, file=ahcfilename)
+            write(outfileindex, '("#",a)')' tau2 nonlinear planar hall effect, in unit of A*V^-2*T^-1 for 3D case, Ang*A*V^-2*T^-1 for 2D cases'
+            write(outfileindex, '("#",a)')' Without Tau'
 
-                write(outfileindex, '("#",a13, 20a16)')' Energy (eV)', '\chi_{xyyy,I}', '\chi_{xyyy,II}', '\chi_{xyyy}', '\chi_{yxxx,I}', '\chi_{yxxx,II}','\chi_{yxxx}', '\chi_{xyyx,I}', '\chi_{xyyx,II}', '\chi_{xyyx}', '\chi_{yxxy,I}', '\chi_{yxxy,II}','\chi_{yxxy}'
-                do ie=1, OmegaNum
-                    write(outfileindex, '(200E16.8)')energy(ie)/eV2Hartree, &
-                        Chi_xyyy_tensor(ie,ieta,1,1), Chi_xyyy_tensor(ie,ieta,1,2), Chi_xyyy_tensor(ie,ieta,1,1) + Chi_xyyy_tensor(ie,ieta,1,2),&
-                        Chi_yxxx_tensor(ie,ieta,1,1), Chi_yxxx_tensor(ie,ieta,1,2), Chi_yxxx_tensor(ie,ieta,1,1) + Chi_yxxx_tensor(ie,ieta,1,2),&
-                        Chi_xyyx_tensor(ie,ieta,1,1), Chi_xyyx_tensor(ie,ieta,1,2), Chi_xyyx_tensor(ie,ieta,1,1) + Chi_xyyx_tensor(ie,ieta,1,2),&
-                        Chi_yxxy_tensor(ie,ieta,1,1), Chi_yxxy_tensor(ie,ieta,1,2), Chi_yxxy_tensor(ie,ieta,1,1) + Chi_yxxy_tensor(ie,ieta,1,2)
-                enddo
-                close(outfileindex)
-            endif
-
-            if (include_m_orb ) then
-                write(ahcfilename, '(7a)')'sigma_NPHC_tau2_L_eta', trim(adjustl(Eta_name)), 'meV.dat'
-                open(unit=outfileindex, file=ahcfilename)
-                write(outfileindex, '("#",a)')' tau2 nonlinear planar hall effect, in unit of A*V^-2*T^-1 for 3D case, Ang*A*V^-2*T^-1 for 2D cases'
-                write(outfileindex, '("#",a)')' Without Tau'
-                
-                write(outfileindex, '("#",a13, 20a16)')' Energy (eV)', '\chi_{xyyy,I}', '\chi_{xyyy,II}', '\chi_{xyyy}', '\chi_{yxxx,I}', '\chi_{yxxx,II}','\chi_{yxxx}', '\chi_{xyyx,I}', '\chi_{xyyx,II}', '\chi_{xyyx}', '\chi_{yxxy,I}', '\chi_{yxxy,II}','\chi_{yxxy}'
-                do ie=1, OmegaNum
-                    write(outfileindex, '(200E16.8)')energy(ie)/eV2Hartree, &
-                        Chi_xyyy_tensor(ie,ieta,2,1), Chi_xyyy_tensor(ie,ieta,2,2), Chi_xyyy_tensor(ie,ieta,2,1) + Chi_xyyy_tensor(ie,ieta,2,2),&
-                        Chi_yxxx_tensor(ie,ieta,2,1), Chi_yxxx_tensor(ie,ieta,2,2), Chi_yxxx_tensor(ie,ieta,2,1) + Chi_yxxx_tensor(ie,ieta,2,2),&
-                        Chi_xyyx_tensor(ie,ieta,2,1), Chi_xyyx_tensor(ie,ieta,2,2), Chi_xyyx_tensor(ie,ieta,2,1) + Chi_xyyx_tensor(ie,ieta,2,2),&
-                        Chi_yxxy_tensor(ie,ieta,2,1), Chi_yxxy_tensor(ie,ieta,2,2), Chi_yxxy_tensor(ie,ieta,2,1) + Chi_yxxy_tensor(ie,ieta,2,2)
-                enddo
-                close(outfileindex)
-            endif
+            write(outfileindex, '("#", 100a18)')' Energy (eV)', &
+            '\chi^S_{xyyy,I}', '\chi^L_{xyyy,I}', '\chi^S_{xyyy,II}', '\chi^L_{xyyy,II}', &
+            '\chi^S_{yxxx,I}', '\chi^L_{yxxx,I}', '\chi^S_{yxxx,II}', '\chi^L_{yxxx,II}', &
+            '\chi^S_{xyyx,I}', '\chi^L_{xyyx,I}', '\chi^S_{xyyx,II}', '\chi^L_{xyyx,II}', &
+            '\chi^S_{yxxy,I}', '\chi^L_{yxxy,I}', '\chi^S_{yxxy,II}', '\chi^L_{yxxy,II}'
+            do ie=1, OmegaNum
+                write(outfileindex, '(100e18.8)')energy(ie)/eV2Hartree, &
+                    Chi_xyyy_tensor(ie,ieta,:,:), Chi_yxxx_tensor(ie,ieta,:,:), Chi_xyyx_tensor(ie,ieta,:,:), Chi_yxxy_tensor(ie,ieta,:,:)
+            enddo
+            close(outfileindex)
+    
         enddo
     endif
 
@@ -1341,10 +1284,10 @@ subroutine sigma_TRAHC ! dynamical mpi, auto adapted k-mesh
     if (cpuid==0) then ! dispatcher
         call now(time_start)
         do ik= 1, (knv3+num_cpu-1)
-            if (mod(ik, 200*(num_cpu-1))==0) then
+            if (mod(ik, 400*(num_cpu-1))==0) then
                 call now(time_end)
                 write(stdout, '(a, i18, "/", i18, a, f10.2, "min")') 'ik/knv3', &
-                    ik, knv3, '  time left', (knv3-ik)*(time_end-time_start)/(num_cpu-1)/200d0/60d0
+                    ik, knv3, '  time left', (knv3-ik)*(time_end-time_start)/(num_cpu-1)/400d0/60d0
                 time_start= time_end
             endif
     
@@ -1372,10 +1315,10 @@ subroutine sigma_TRAHC ! dynamical mpi, auto adapted k-mesh
         call get_ik_adapt_list()
         call now(time_start)
         do ik2= 1, (Nk_adapt+num_cpu-1)
-            if (mod(ik2, 200*(num_cpu-1))==0) then
+            if (mod(ik2, 400*(num_cpu-1))==0) then
                 call now(time_end)
                 write(stdout, '(a, i18, "/", i18, a, f10.2, "min")') 'ik/Nk_adapt', &
-                    ik2, Nk_adapt, '  time left', (Nk_adapt-ik2)*(time_end-time_start)/(num_cpu-1)/200d0/60d0
+                    ik2, Nk_adapt, '  time left', (Nk_adapt-ik2)*(time_end-time_start)/(num_cpu-1)/400d0/60d0
                 time_start= time_end
             endif
 
@@ -1486,10 +1429,10 @@ subroutine sigma_SOAHC_int ! static mpi, fixed k-mesh
 
     call now(time_start)
     do ik= 1+ cpuid, knv3, num_cpu
-        if (cpuid.eq.0.and. mod(ik/num_cpu, 2000).eq.0) then
+        if (cpuid.eq.0.and. mod(ik/num_cpu, 400).eq.0) then
             call now(time_end)
             write(stdout, '(a, i18, "/", i18, a, f10.2, "min")') 'ik/knv3', &
-                ik, knv3, '  time left', (knv3-ik)*(time_end-time_start)/num_cpu/2000d0/60d0
+                ik, knv3, '  time left', (knv3-ik)*(time_end-time_start)/num_cpu/400d0/60d0
             time_start= time_end
         endif
 

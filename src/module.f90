@@ -598,12 +598,13 @@
      integer :: topsurface_atom_index
      real(dp) :: shift_to_topsurface_cart(3)
 
-     ! The energy threshold to judge the degenerate bands
-     ! For normal hr.dat, the numerical error between two physical degenerate bands is about 0.1~ meV.
-     ! So we set it to 1meV = 3.6749d-5 Hartree (see readinput.f90), 
-     ! a relatively large value. It will lead to smoother curves of the conductivities.
-     ! If you want larger peaks of the conductivities, or you have symmetrized your hr.dat to reduce the numerical error,
-     ! you can set the threshold to a smaller value like 0.01meV = 3.6749d-7.
+     ! The energy threshold to judge the degenerate bands and serve as a broadening
+     ! For normal hr.dat, the numerical error between two physical degenerate bands is about 0.1 meV.
+     ! So we set the default value to 1meV = 3.6749d-5 Hartree. 
+     ! It will lead to better convergence.
+     ! If you have symmetrized your hr.dat to reduce the numerical error,
+     ! you can set the threshold to a smaller value like 0.1meV = 3.6749d-6.
+     ! But do not use 0.01meV, a too small value will lead to wrong results 
      real(dp) :: band_degeneracy_threshold
 
      !> namelist parameters

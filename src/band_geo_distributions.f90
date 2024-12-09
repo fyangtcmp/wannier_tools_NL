@@ -84,7 +84,7 @@ subroutine band_geo_props_kplane
             write(outfileindex, '("# sumover: Fermi ", a15)') option_sumover
             write(outfileindex, '("# unit: (e^2)/hbar * Angstorm^3 * (Ohm * V * T)^-1 ")') 
             ! write(outfileindex, '("#",1a11, 2a12, 17a20)') "kx(1/A)", "ky(1/A)", "kz(1/A)", '\Upsilon_{xyyy}', '\Upsilon_{yxxx}', '\Upsilon_{xyyx}', '\Upsilon_{yxxy}' 
-            write(outfileindex, '("#",1a11, 2a12, 17a20)') "kx(1/A)", "ky(1/A)", "kz(1/A)", '\Upsilon_{xyyy}', '\Upsilon_{yxxx}', '\Upsilon_{xyyx}', '\Upsilon_{yxxy}' 
+            write(outfileindex, '("#",1a11, 2a12, 17a20)') "kx(1/A)", "ky(1/A)", "kz(1/A)", '\Upsilon^{S}_{I}', '\Upsilon^{S}_{II}', '\Upsilon^{L}_{I}', '\Upsilon^{L}_{II}', 'M^{L}_{x}f^{\prime}', 'M^{L}_{y}f^{\prime}'
         case ("SHC")
             open(unit=outfileindex, file='SHC_kplane.dat')
             write(outfileindex, '("# sumover: Fermi ", a15)') option_sumover
@@ -148,7 +148,7 @@ subroutine SOAHC_int_dist_single_k_Ef(k_in, props)
     UU=Hamk_bulk
     call eigensystem_c( 'V', 'U', Num_wann, UU, W)
     UU_dag= conjg(transpose(UU))
-    call velocity_latticegauge_simple(k_in, UU, velocities)
+    call dHdk_latticegauge_Ham(k_in, W, UU, velocities)
     vx = velocities(:,:,1)
     vy = velocities(:,:,2)
 
@@ -203,12 +203,15 @@ subroutine NPHC_int_dist_single_k_Ef(k_in, props)
 
     real(dp), intent(in)  :: k_in(3)
     real(dp), intent(out) :: props(6)
-    integer  :: sum_end
 
-    real(dp), allocatable :: Chi_xyyy_k         (:,:)
-    real(dp), allocatable :: Chi_yxxx_k         (:,:)
-    real(dp), allocatable :: Chi_xyyx_k         (:,:)
-    real(dp), allocatable :: Chi_yxxy_k         (:,:)
+    real(dp) :: Chi_xyyy_k(2,2)
+    real(dp) :: Chi_yxxx_k(2,2)
+    real(dp) :: Chi_xyyx_k(2,2)
+    real(dp) :: Chi_yxxy_k(2,2)
+
+    integer :: L1, L2, L3
+    real(dp) :: Lambda_S(2,2,2)
+    real(dp) :: Lambda_L(2,2,2)
 
     complex(dp), allocatable :: M_S(:, :, :) !> spin magnetic moments
     complex(dp), allocatable :: M_L(:, :, :) !> orbital magnetic moments
@@ -216,60 +219,51 @@ subroutine NPHC_int_dist_single_k_Ef(k_in, props)
     real(dp) :: k_dkx(3)
     real(dp) :: k_dky(3)
     
-    real(dp) :: diffFermi, M_S_k(3), M_L_k(3)
+    real(dp) :: Fermi_factor, M_S_k(3), M_L_k(3)
 
     ! eigen value of H
     real(dp),    allocatable :: W(:)
     complex(dp), allocatable :: Hamk_bulk(:, :)
-    complex(dp), allocatable :: Amat(:, :)
     complex(dp), allocatable :: UU(:, :)
-    complex(dp), allocatable :: UU_dag(:, :)
 
     real(dp), allocatable :: W_dkx(:)
     real(dp), allocatable :: W_dky(:)
 
-    complex(dp), allocatable :: sx(:, :), sy(:, :)
-    complex(dp), allocatable :: lx(:, :), ly(:, :)
-    complex(dp), allocatable :: vx(:, :), vy(:, :)
-    complex(dp), allocatable :: velocities(:,:,:)
+    complex(dp), allocatable :: velocities(:,:,:), velocities_dkx(:,:,:), velocities_dky(:,:,:)
 
-    complex(dp), allocatable :: vx_dkx(:, :), vy_dkx(:, :)  
-    complex(dp), allocatable :: vx_dky(:, :), vy_dky(:, :) 
-
-    real(dp) :: Lambda_xyy_S, Lambda_yyy_S, Lambda_yxx_S, Lambda_xxx_S
-    real(dp) :: Lambda_xyy_L, Lambda_yyy_L, Lambda_yxx_L, Lambda_xxx_L
-    real(dp) :: Lambda_xxy_S, Lambda_yxy_S, Lambda_yyx_S, Lambda_xyx_S
-    real(dp) :: Lambda_xxy_L, Lambda_yxy_L, Lambda_yyx_L, Lambda_xyx_L
     real(dp) :: G_xx, G_xy, G_yx, G_yy, G_yy_dkx, G_xy_dky, G_xx_dky, G_yx_dkx
     real(dp) :: dEnm, dEnm3, dEml, dEnl
-
-    allocate( Chi_xyyy_k         (2,2))
-    allocate( Chi_yxxx_k         (2,2))
-    allocate( Chi_xyyx_k         (2,2))
-    allocate( Chi_yxxy_k         (2,2))
     
-    !===========================================================================
-    !> original kpoints
-    allocate( W (Num_wann))
+    allocate( velocities(Num_wann, Num_wann, 3), velocities_dkx(Num_wann, Num_wann, 3), velocities_dky(Num_wann, Num_wann, 3))
+    allocate( W(Num_wann), W_dkx(Num_wann), W_dky(Num_wann))
     allocate( Hamk_bulk (Num_wann, Num_wann))
-    allocate( Amat (Num_wann, Num_wann))
     allocate( UU (Num_wann, Num_wann))
-    allocate( UU_dag (Num_wann, Num_wann))
 
-    allocate( velocities(Num_wann, Num_wann, 3))
-    allocate( vx(Num_wann, Num_wann), vy(Num_wann, Num_wann))
-    allocate( sx(Num_wann, Num_wann), sy(Num_wann, Num_wann))
-    allocate( lx(Num_wann, Num_wann), ly(Num_wann, Num_wann))
+    !> k + dkx <==============================================================
+    k_dkx = k_in+(/Origin_cell%Rua(1)*dkx , Origin_cell%Rub(1)*dkx , Origin_cell%Ruc(1)*dkx/)/twopi
+    
+    call ham_bulk_latticegauge(k_dkx, Hamk_bulk)
+    UU=Hamk_bulk
+    call eigensystem_c( 'V', 'U', Num_wann, UU, W_dkx)
+    call dHdk_latticegauge_Ham(k_dkx, W_dkx, UU, velocities_dkx)
+    !==========================================================================
 
+    !> k + dky <===============================================================
+    k_dky = k_in+(/Origin_cell%Rua(2)*dky , Origin_cell%Rub(2)*dky , Origin_cell%Ruc(2)*dky/)/twopi
+
+    call ham_bulk_latticegauge(k_dky, Hamk_bulk)
+    UU=Hamk_bulk
+    call eigensystem_c( 'V', 'U', Num_wann, UU, W_dky)
+    call dHdk_latticegauge_Ham(k_dky, W_dky, UU, velocities_dky)
+    !===========================================================================
+
+    !> original kpoints <=======================================================
     call ham_bulk_latticegauge(k_in, Hamk_bulk)
     UU=Hamk_bulk
     call eigensystem_c( 'V', 'U', Num_wann, UU, W)
-    UU_dag= conjg(transpose(UU))
-    call velocity_latticegauge_simple(k_in, UU, velocities)
-    vx = velocities(:,:,1)
-    vy = velocities(:,:,2)
-
+    call dHdk_latticegauge_Ham(k_in, W, UU, velocities)
     !===========================================================================
+
     !> magnetic operators 
     allocate( M_S(Num_wann, Num_wann,3) )
     allocate( M_L(Num_wann, Num_wann,3) )
@@ -278,42 +272,10 @@ subroutine NPHC_int_dist_single_k_Ef(k_in, props)
     M_L = 0d0
     if (include_m_spin) then
         call spin_magnetic_moments(UU, M_S)
-        sx = M_S(:,:,1)
-        sy = M_S(:,:,2)
     endif
     if (include_m_orb) then
         call orbital_magnetic_moments(W, velocities, M_L)
-        lx = M_L(:,:,1)
-        ly = M_L(:,:,2)
-    endif    
-
-    !> k + dk_x <===============================================================
-    allocate( W_dkx (Num_wann))   
-    allocate( vx_dkx(Num_wann, Num_wann), vy_dkx(Num_wann, Num_wann))
-
-    k_dkx = k_in+(/Origin_cell%Rua(1)*dkx , Origin_cell%Rub(1)*dkx , Origin_cell%Ruc(1)*dkx/)/twopi
-
-    call ham_bulk_latticegauge(k_dkx, Hamk_bulk)
-    UU=Hamk_bulk
-    call eigensystem_c( 'V', 'U', Num_wann, UU, W_dkx)
-    call velocity_latticegauge_simple(k_dkx, UU, velocities)
-    vx_dkx = velocities(:,:,1)
-    vy_dkx = velocities(:,:,2)
-    !===========================================================================
-
-    !> k + dk_y <===============================================================
-    allocate( W_dky (Num_wann))
-    allocate( vx_dky(Num_wann, Num_wann), vy_dky(Num_wann, Num_wann))
-
-    k_dky = k_in+(/Origin_cell%Rua(2)*dky , Origin_cell%Rub(2)*dky , Origin_cell%Ruc(2)*dky/)/twopi
-
-    call ham_bulk_latticegauge(k_dky, Hamk_bulk)
-    UU=Hamk_bulk
-    call eigensystem_c( 'V', 'U', Num_wann, UU, W_dky)
-    call velocity_latticegauge_simple(k_dky, UU, velocities)
-    vx_dky = velocities(:,:,1)
-    vy_dky = velocities(:,:,2)
-    !===========================================================================
+    endif
 
     Chi_xyyy_k = 0d0
     Chi_yxxx_k = 0d0
@@ -322,15 +284,7 @@ subroutine NPHC_int_dist_single_k_Ef(k_in, props)
     M_S_k = 0d0
     M_L_k = 0d0
 
-    if (option_sumover=='sea') then ! 'sea'=Fermi sea
-        sum_end = Numoccupied
-    elseif (option_sumover=='surface') then ! 'surface'=Fermi surface
-        sum_end = Num_wann
-    else
-        stop "ERROR: option_sumover was wrongly set, must be in ""sea"" ""surface"" "
-    endif
-
-    do n= 1, sum_end
+    do n= 1, Num_wann
         if (W(n)<OmegaMin- 2.d-2 .or. W(n)>OmegaMax+ 2.d-2) cycle !> prevent NaN error
         G_xx= 0d0
         G_xy= 0d0
@@ -339,149 +293,96 @@ subroutine NPHC_int_dist_single_k_Ef(k_in, props)
         G_yy_dkx= 0d0 
         G_xy_dky= 0d0 
         G_xx_dky= 0d0 
-        G_yx_dkx= 0d0        
-        Lambda_xyy_S = 0d0
-        Lambda_yyy_S = 0d0
-        Lambda_yxx_S = 0d0
-        Lambda_xxx_S = 0d0
-        Lambda_xyy_L = 0d0
-        Lambda_yyy_L = 0d0
-        Lambda_yxx_L = 0d0
-        Lambda_xxx_L = 0d0
-        Lambda_xxy_S = 0d0
-        Lambda_yxy_S = 0d0
-        Lambda_yyx_S = 0d0
-        Lambda_xyx_S = 0d0
-        Lambda_xxy_L = 0d0
-        Lambda_yxy_L = 0d0
-        Lambda_yyx_L = 0d0
-        Lambda_xyx_L = 0d0
+        G_yx_dkx= 0d0
+
+        Lambda_S = 0d0
+        Lambda_L = 0d0
 
         do m= 1, Num_wann
             dEnm= W(n) - W(m)           
             if (ABS(dEnm) < band_degeneracy_threshold) cycle
 
             dEnm3= dEnm**3
-            G_xx= G_xx+ 2.d0*real( vx(n, m)*vx(m, n) )/dEnm3
-            G_xy= G_xy+ 2.d0*real( vx(n, m)*vy(m, n) )/dEnm3
-            G_yx= G_yx+ 2.d0*real( vy(n, m)*vx(m, n) )/dEnm3
-            G_yy= G_yy+ 2.d0*real( vy(n, m)*vy(m, n) )/dEnm3
+            G_xx= G_xx+ 2.d0*real( velocities(n,m,1)*velocities(m,n,1) )/dEnm3
+            G_xy= G_xy+ 2.d0*real( velocities(n,m,1)*velocities(m,n,2) )/dEnm3
+            G_yx= G_yx+ 2.d0*real( velocities(n,m,2)*velocities(m,n,1) )/dEnm3
+            G_yy= G_yy+ 2.d0*real( velocities(n,m,2)*velocities(m,n,1) )/dEnm3
 
-            G_yy_dkx= G_yy_dkx + 2.d0*real( vy_dkx(n, m)*vy_dkx(m, n) )/(W_dkx(n) - W_dkx(m))**3
-            G_yx_dkx= G_yx_dkx + 2.d0*real( vy_dkx(n, m)*vx_dkx(m, n) )/(W_dkx(n) - W_dkx(m))**3
+            G_yy_dkx= G_yy_dkx + 2.d0*real( velocities_dkx(n,m,2)*velocities_dkx(m,n,2) )/(W_dkx(n) - W_dkx(m))**3
+            G_yx_dkx= G_yx_dkx + 2.d0*real( velocities_dkx(n,m,2)*velocities_dkx(m,n,1) )/(W_dkx(n) - W_dkx(m))**3
             
-            G_xy_dky= G_xy_dky + 2.d0*real( vx_dky(n, m)*vy_dky(m, n) )/(W_dky(n) - W_dky(m))**3
-            G_xx_dky= G_xx_dky + 2.d0*real( vx_dky(n, m)*vx_dky(m, n) )/(W_dky(n) - W_dky(m))**3
+            G_xy_dky= G_xy_dky + 2.d0*real( velocities_dky(n,m,1)*velocities_dky(m,n,2) )/(W_dky(n) - W_dky(m))**3
+            G_xx_dky= G_xx_dky + 2.d0*real( velocities_dky(n,m,1)*velocities_dky(m,n,1) )/(W_dky(n) - W_dky(m))**3
 
-            if (include_m_spin) then
-                Lambda_xyy_S = Lambda_xyy_S + 6.d0* real( vx(n, m)*vy(m, n)*(sy(n, n)-sy(m, m)) )/dEnm3/dEnm
-                Lambda_yyy_S = Lambda_yyy_S + 6.d0* real( vy(n, m)*vy(m, n)*(sy(n, n)-sy(m, m)) )/dEnm3/dEnm
-                Lambda_yxx_S = Lambda_yxx_S + 6.d0* real( vy(n, m)*vx(m, n)*(sx(n, n)-sx(m, m)) )/dEnm3/dEnm
-                Lambda_xxx_S = Lambda_xxx_S + 6.d0* real( vx(n, m)*vx(m, n)*(sx(n, n)-sx(m, m)) )/dEnm3/dEnm
-                Lambda_xxy_S = Lambda_xxy_S + 6.d0* real( vx(n, m)*vx(m, n)*(sy(n, n)-sy(m, m)) )/dEnm3/dEnm
-                Lambda_yxy_S = Lambda_yxy_S + 6.d0* real( vy(n, m)*vx(m, n)*(sy(n, n)-sy(m, m)) )/dEnm3/dEnm
-                Lambda_yyx_S = Lambda_yyx_S + 6.d0* real( vy(n, m)*vy(m, n)*(sx(n, n)-sx(m, m)) )/dEnm3/dEnm
-                Lambda_xyx_S = Lambda_xyx_S + 6.d0* real( vx(n, m)*vy(m, n)*(sx(n, n)-sx(m, m)) )/dEnm3/dEnm
+            do L1 = 1,2
+                do L2 = 1,2
+                    do L3 = 1,2
+                        Lambda_S(L1,L2,L3) = Lambda_S(L1,L2,L3) + 6.d0* real( velocities(n,m,L1)*velocities(m,n,L2)*(M_S(n,n,L3)-M_S(m,m,L3)) )/dEnm3/dEnm
+                        Lambda_L(L1,L2,L3) = Lambda_L(L1,L2,L3) + 6.d0* real( velocities(n,m,L1)*velocities(m,n,L2)*(M_L(n,n,L3)-M_L(m,m,L3)) )/dEnm3/dEnm
+                    enddo
+                enddo
+            enddo
                 
                 do l= 1, Num_wann
                     dEnl= W(n)-W(l)
-                    dEml= W(m)-W(l)                    
+                    dEml= W(m)-W(l)                
                     if (ABS(dEnl) > band_degeneracy_threshold) then
-                        Lambda_xyy_S = Lambda_xyy_S - 2.d0* real( (vx(l, m)*vy(m, n)+vy(l, m)*vx(m, n)) *sy(n, l)) /dEnm3/dEnl
-                        Lambda_yyy_S = Lambda_yyy_S - 2.d0* real( (vy(l, m)*vy(m, n)+vy(l, m)*vy(m, n)) *sy(n, l)) /dEnm3/dEnl
-                        Lambda_yxx_S = Lambda_yxx_S - 2.d0* real( (vy(l, m)*vx(m, n)+vx(l, m)*vy(m, n)) *sx(n, l)) /dEnm3/dEnl
-                        Lambda_xxx_S = Lambda_xxx_S - 2.d0* real( (vx(l, m)*vx(m, n)+vx(l, m)*vx(m, n)) *sx(n, l)) /dEnm3/dEnl
-                        Lambda_xxy_S = Lambda_xxy_S - 2.d0* real( (vx(l, m)*vx(m, n)*2                ) *sy(n, l)) /dEnm3/dEnl
-                        Lambda_yxy_S = Lambda_yxy_S - 2.d0* real( (vy(l, m)*vx(m, n)+vx(l, m)*vy(m, n)) *sy(n, l)) /dEnm3/dEnl
-                        Lambda_yyx_S = Lambda_yyx_S - 2.d0* real( (vy(l, m)*vy(m, n)*2                ) *sx(n, l)) /dEnm3/dEnl
-                        Lambda_xyx_S = Lambda_xyx_S - 2.d0* real( (vx(l, m)*vy(m, n)+vy(l, m)*vx(m, n)) *sx(n, l)) /dEnm3/dEnl
+                        do L1 = 1,2
+                            do L2 = 1,2
+                                do L3 = 1,2
+                                    Lambda_S(L1,L2,L3) = Lambda_S(L1,L2,L3) - 2.d0* real( (velocities(l,m,L1)*velocities(m,n,L2) + velocities(l,m,L2)*velocities(m,n,L1))* M_S(n,l,L3) )/dEnm3/dEnl
+                                    Lambda_L(L1,L2,L3) = Lambda_L(L1,L2,L3) - 2.d0* real( (velocities(l,m,L1)*velocities(m,n,L2) + velocities(l,m,L2)*velocities(m,n,L1))* M_L(n,l,L3) )/dEnm3/dEnl
+                                enddo
+                            enddo
+                        enddo
                     endif
                     if (ABS(dEml) > band_degeneracy_threshold) then
-                        Lambda_xyy_S = Lambda_xyy_S - 2.d0* real( (vx(l, n)*vy(n, m)+vy(l, n)*vx(n, m)) *sy(m, l)) /dEnm3/dEml
-                        Lambda_yyy_S = Lambda_yyy_S - 2.d0* real( (vy(l, n)*vy(n, m)+vy(l, n)*vy(n, m)) *sy(m, l)) /dEnm3/dEml
-                        Lambda_yxx_S = Lambda_yxx_S - 2.d0* real( (vy(l, n)*vx(n, m)+vx(l, n)*vy(n, m)) *sx(m, l)) /dEnm3/dEml
-                        Lambda_xxx_S = Lambda_xxx_S - 2.d0* real( (vx(l, n)*vx(n, m)+vx(l, n)*vx(n, m)) *sx(m, l)) /dEnm3/dEml
-                        Lambda_xxy_S = Lambda_xxy_S - 2.d0* real( (vx(l, n)*vx(n, m)*2                ) *sy(m, l)) /dEnm3/dEml
-                        Lambda_yxy_S = Lambda_yxy_S - 2.d0* real( (vy(l, n)*vx(n, m)+vx(l, n)*vy(n, m)) *sy(m, l)) /dEnm3/dEml
-                        Lambda_yyx_S = Lambda_yyx_S - 2.d0* real( (vy(l, n)*vy(n, m)*2                ) *sx(m, l)) /dEnm3/dEml
-                        Lambda_xyx_S = Lambda_xyx_S - 2.d0* real( (vx(l, n)*vy(n, m)+vy(l, n)*vx(n, m)) *sx(m, l)) /dEnm3/dEml
+                        do L1 = 1,2
+                            do L2 = 1,2
+                                do L3 = 1,2
+                                    Lambda_S(L1,L2,L3) = Lambda_S(L1,L2,L3) - 2.d0* real( (velocities(l,n,L1)*velocities(n,m,L2) + velocities(l,n,L2)*velocities(n,m,L1)) * M_S(m,l,L3) )/dEnm3/dEml
+                                    Lambda_L(L1,L2,L3) = Lambda_L(L1,L2,L3) - 2.d0* real( (velocities(l,n,L1)*velocities(n,m,L2) + velocities(l,n,L2)*velocities(n,m,L1)) * M_L(m,l,L3) )/dEnm3/dEml
+                                enddo
+                            enddo
+                        enddo
                     endif
-                enddo ! l
-            endif
 
-            if (include_m_orb) then
-                Lambda_xyy_L = Lambda_xyy_L + 6.d0* real( vx(n, m)*vy(m, n)*(ly(n, n)-ly(m, m)) )/dEnm3/dEnm
-                Lambda_yyy_L = Lambda_yyy_L + 6.d0* real( vy(n, m)*vy(m, n)*(ly(n, n)-ly(m, m)) )/dEnm3/dEnm
-                Lambda_yxx_L = Lambda_yxx_L + 6.d0* real( vy(n, m)*vx(m, n)*(lx(n, n)-lx(m, m)) )/dEnm3/dEnm
-                Lambda_xxx_L = Lambda_xxx_L + 6.d0* real( vx(n, m)*vx(m, n)*(lx(n, n)-lx(m, m)) )/dEnm3/dEnm
-                Lambda_xxy_L = Lambda_xxy_L + 6.d0* real( vx(n, m)*vx(m, n)*(sy(n, n)-ly(m, m)) )/dEnm3/dEnm
-                Lambda_yxy_L = Lambda_yxy_L + 6.d0* real( vy(n, m)*vx(m, n)*(sy(n, n)-ly(m, m)) )/dEnm3/dEnm
-                Lambda_yyx_L = Lambda_yyx_L + 6.d0* real( vy(n, m)*vy(m, n)*(sx(n, n)-lx(m, m)) )/dEnm3/dEnm
-                Lambda_xyx_L = Lambda_xyx_L + 6.d0* real( vx(n, m)*vy(m, n)*(sx(n, n)-lx(m, m)) )/dEnm3/dEnm
-                
-                do l= 1, Num_wann
-                    dEnl= W(n)-W(l)
-                    dEml= W(m)-W(l)                    
-                    if (ABS(dEnl) > band_degeneracy_threshold) then
-                        Lambda_xyy_L = Lambda_xyy_L - 2.d0* real( (vx(l, m)*vy(m, n)+vy(l, m)*vx(m, n)) *ly(n, l)) /dEnm3/dEnl
-                        Lambda_yyy_L = Lambda_yyy_L - 2.d0* real( (vy(l, m)*vy(m, n)+vy(l, m)*vy(m, n)) *ly(n, l)) /dEnm3/dEnl
-                        Lambda_yxx_L = Lambda_yxx_L - 2.d0* real( (vy(l, m)*vx(m, n)+vx(l, m)*vy(m, n)) *lx(n, l)) /dEnm3/dEnl
-                        Lambda_xxx_L = Lambda_xxx_L - 2.d0* real( (vx(l, m)*vx(m, n)+vx(l, m)*vx(m, n)) *lx(n, l)) /dEnm3/dEnl
-                        Lambda_xxy_L = Lambda_xxy_L - 2.d0* real( (vx(l, m)*vx(m, n)*2                ) *ly(n, l)) /dEnm3/dEnl
-                        Lambda_yxy_L = Lambda_yxy_L - 2.d0* real( (vy(l, m)*vx(m, n)+vx(l, m)*vy(m, n)) *ly(n, l)) /dEnm3/dEnl
-                        Lambda_yyx_L = Lambda_yyx_L - 2.d0* real( (vy(l, m)*vy(m, n)*2                ) *lx(n, l)) /dEnm3/dEnl
-                        Lambda_xyx_L = Lambda_xyx_L - 2.d0* real( (vx(l, m)*vy(m, n)+vy(l, m)*vx(m, n)) *lx(n, l)) /dEnm3/dEnl
-                    endif
-                    if (ABS(dEml) > band_degeneracy_threshold) then
-                        Lambda_xyy_L = Lambda_xyy_L - 2.d0* real( (vx(l, n)*vy(n, m)+vy(l, n)*vx(n, m)) *ly(m, l)) /dEnm3/dEml
-                        Lambda_yyy_L = Lambda_yyy_L - 2.d0* real( (vy(l, n)*vy(n, m)+vy(l, n)*vy(n, m)) *ly(m, l)) /dEnm3/dEml
-                        Lambda_yxx_L = Lambda_yxx_L - 2.d0* real( (vy(l, n)*vx(n, m)+vx(l, n)*vy(n, m)) *lx(m, l)) /dEnm3/dEml
-                        Lambda_xxx_L = Lambda_xxx_L - 2.d0* real( (vx(l, n)*vx(n, m)+vx(l, n)*vx(n, m)) *lx(m, l)) /dEnm3/dEml
-                        Lambda_xxy_L = Lambda_xxy_L - 2.d0* real( (vx(l, n)*vx(n, m)*2                ) *ly(m, l)) /dEnm3/dEml
-                        Lambda_yxy_L = Lambda_yxy_L - 2.d0* real( (vy(l, n)*vx(n, m)+vx(l, n)*vy(n, m)) *ly(m, l)) /dEnm3/dEml
-                        Lambda_yyx_L = Lambda_yyx_L - 2.d0* real( (vy(l, n)*vy(n, m)*2                ) *lx(m, l)) /dEnm3/dEml
-                        Lambda_xyx_L = Lambda_xyx_L - 2.d0* real( (vx(l, n)*vy(n, m)+vy(l, n)*vx(n, m)) *lx(m, l)) /dEnm3/dEml
-                    endif
                 enddo ! l
-            endif
         enddo ! m
 
         if (option_sumover=='sea') then ! 'sea'=Fermi sea
-            diffFermi = 1d0
+            Fermi_factor =  1d0 / (Exp((W(n) - E_arc)/Eta_Arc)+1d0)
         elseif (option_sumover=='surface') then ! 'surface'=Fermi surface
-            diffFermi = -1d0 / (Exp((W(n) - E_arc)/Eta_Arc)+1d0) / (Exp(-(W(n) - E_arc)/Eta_Arc)+1d0) / Eta_Arc
+            Fermi_factor = -1d0 / (Exp((W(n) - E_arc)/Eta_Arc)+1d0) / (Exp(-(W(n) - E_arc)/Eta_Arc)+1d0) / Eta_Arc
         endif
-
-        ieta = 1
+        
         if (include_m_spin) then
-            Chi_xyyy_k(1, 1) = Chi_xyyy_k(1, 1) + real( (vx(n,n)*Lambda_yyy_S - vy(n,n)*Lambda_xyy_S) ) * diffFermi
-            Chi_xyyy_k(1, 2) = Chi_xyyy_k(1, 2) + real( ((G_yy_dkx - G_yy)/dkx - (G_xy_dky - G_xy)/dky)*sy(n,n) ) * diffFermi
+            Chi_xyyy_k(1, 1) = Chi_xyyy_k(1, 1) + ( real(velocities(n,n,1))*Lambda_S(2,2,2) - real(velocities(n,n,2))*Lambda_S(1,2,2) ) * Fermi_factor
+            Chi_xyyy_k(1, 2) = Chi_xyyy_k(1, 2) + ((G_yy_dkx - G_yy)/dkx - (G_xy_dky - G_xy)/dky)*real(M_S(n,n,2)) * Fermi_factor
 
-            Chi_yxxx_k(1, 1) = Chi_yxxx_k(1, 1) + real( (vy(n,n)*Lambda_xxx_S - vx(n,n)*Lambda_yxx_S) ) * diffFermi
-            Chi_yxxx_k(1, 2) = Chi_yxxx_k(1, 2) + real( ((G_xx_dky - G_xx)/dky - (G_yx_dkx - G_yx)/dkx)*sx(n,n) ) * diffFermi
+            Chi_yxxx_k(1, 1) = Chi_yxxx_k(1, 1) + ( real(velocities(n,n,2))*Lambda_S(1,1,1) - real(velocities(n,n,1))*Lambda_S(2,1,1) ) * Fermi_factor
+            Chi_yxxx_k(1, 2) = Chi_yxxx_k(1, 2) + ((G_xx_dky - G_xx)/dky - (G_yx_dkx - G_yx)/dkx)*real(M_S(n,n,1)) * Fermi_factor
 
-            Chi_xyyx_k(1, 1) = Chi_xyyx_k(1, 1) + real( (vx(n,n)*Lambda_yyx_S - vy(n,n)*Lambda_xyx_S) ) * diffFermi
-            Chi_xyyx_k(1, 2) = Chi_xyyx_k(1, 2) + real( ((G_yy_dkx - G_yy)/dkx - (G_xy_dky - G_xy)/dky)*sx(n,n) ) * diffFermi
+            Chi_xyyx_k(1, 1) = Chi_xyyx_k(1, 1) + ( real(velocities(n,n,1))*Lambda_S(2,2,1) - real(velocities(n,n,2))*Lambda_S(1,2,1) ) * Fermi_factor
+            Chi_xyyx_k(1, 2) = Chi_xyyx_k(1, 2) + ((G_yy_dkx - G_yy)/dkx - (G_xy_dky - G_xy)/dky)*real(M_S(n,n,1)) * Fermi_factor
 
-            Chi_yxxy_k(1, 1) = Chi_yxxy_k(1, 1) + real( (vy(n,n)*Lambda_xxy_S - vx(n,n)*Lambda_yxy_S) ) * diffFermi
-            Chi_yxxy_k(1, 2) = Chi_yxxy_k(1, 2) + real( ((G_xx_dky - G_xx)/dky - (G_yx_dkx - G_yx)/dkx)*sy(n,n) ) * diffFermi
-            
-            M_S_k = M_S_k + [real(sx(n, n)), real(sy(n, n)), 0d0]
+            Chi_yxxy_k(1, 1) = Chi_yxxy_k(1, 1) + ( real(velocities(n,n,2))*Lambda_S(1,1,2) - real(velocities(n,n,1))*Lambda_S(2,1,2) ) * Fermi_factor
+            Chi_yxxy_k(1, 2) = Chi_yxxy_k(1, 2) + ((G_xx_dky - G_xx)/dky - (G_yx_dkx - G_yx)/dkx)*real(M_S(n,n,2)) * Fermi_factor
+            M_S_k = M_S_k + [real(M_S(n, n, 1)), real(M_S(n, n, 2)), 0d0] * Fermi_factor
         endif
         if (include_m_orb) then
-            Chi_xyyy_k(2, 1) = Chi_xyyy_k(2, 1) + real( (vx(n,n)*Lambda_yyy_L - vy(n,n)*Lambda_xyy_L) ) * diffFermi
-            Chi_xyyy_k(2, 2) = Chi_xyyy_k(2, 2) + real( ((G_yy_dkx - G_yy)/dkx - (G_xy_dky - G_xy)/dky)*ly(n,n) ) * diffFermi
+            Chi_xyyy_k(2, 1) = Chi_xyyy_k(2, 1) + ( real(velocities(n,n,1))*Lambda_L(2,2,2) - real(velocities(n,n,2))*Lambda_L(1,2,2) ) * Fermi_factor
+            Chi_xyyy_k(2, 2) = Chi_xyyy_k(2, 2) + ((G_yy_dkx - G_yy)/dkx - (G_xy_dky - G_xy)/dky)*real(M_L(n,n,2)) * Fermi_factor
 
-            Chi_yxxx_k(2, 1) = Chi_yxxx_k(2, 1) + real( (vy(n,n)*Lambda_xxx_L - vx(n,n)*Lambda_yxx_L) ) * diffFermi
-            Chi_yxxx_k(2, 2) = Chi_yxxx_k(2, 2) + real( ((G_xx_dky - G_xx)/dky - (G_yx_dkx - G_yx)/dkx)*lx(n,n) ) * diffFermi
+            Chi_yxxx_k(2, 1) = Chi_yxxx_k(2, 1) + ( real(velocities(n,n,2))*Lambda_L(1,1,1) - real(velocities(n,n,1))*Lambda_L(2,1,1) ) * Fermi_factor
+            Chi_yxxx_k(2, 2) = Chi_yxxx_k(2, 2) + ((G_xx_dky - G_xx)/dky - (G_yx_dkx - G_yx)/dkx)*real(M_L(n,n,1)) * Fermi_factor
 
-            Chi_xyyx_k(2, 1) = Chi_xyyx_k(2, 1) + real( (vx(n,n)*Lambda_yyx_L - vy(n,n)*Lambda_xyx_L) ) * diffFermi
-            Chi_xyyx_k(2, 2) = Chi_xyyx_k(2, 2) + real( ((G_yy_dkx - G_yy)/dkx - (G_xy_dky - G_xy)/dky)*lx(n,n) ) * diffFermi
+            Chi_xyyx_k(2, 1) = Chi_xyyx_k(2, 1) + ( real(velocities(n,n,1))*Lambda_L(2,2,1) - real(velocities(n,n,2))*Lambda_L(1,2,1) ) * Fermi_factor
+            Chi_xyyx_k(2, 2) = Chi_xyyx_k(2, 2) + ((G_yy_dkx - G_yy)/dkx - (G_xy_dky - G_xy)/dky)*real(M_L(n,n,1)) * Fermi_factor
 
-            Chi_yxxy_k(2, 1) = Chi_yxxy_k(2, 1) + real( (vy(n,n)*Lambda_xxy_L - vx(n,n)*Lambda_yxy_L) ) * diffFermi
-            Chi_yxxy_k(2, 2) = Chi_yxxy_k(2, 2) + real( ((G_xx_dky - G_xx)/dky - (G_yx_dkx - G_yx)/dkx)*ly(n,n) ) * diffFermi
-
-            M_L_k = M_L_k + [real(lx(n, n)), real(ly(n, n)), 0d0]
+            Chi_yxxy_k(2, 1) = Chi_yxxy_k(2, 1) + ( real(velocities(n,n,2))*Lambda_L(1,1,2) - real(velocities(n,n,1))*Lambda_L(2,1,2) ) * Fermi_factor
+            Chi_yxxy_k(2, 2) = Chi_yxxy_k(2, 2) + ((G_xx_dky - G_xx)/dky - (G_yx_dkx - G_yx)/dkx)*real(M_L(n,n,2)) * Fermi_factor
+            M_L_k = M_L_k + [real(M_L(n, n, 1)), real(M_L(n, n, 2)), 0d0] * Fermi_factor
         endif
     enddo ! n
 
@@ -492,15 +393,12 @@ subroutine NPHC_int_dist_single_k_Ef(k_in, props)
     ! props(5) = 0d0
     ! props(6) = 0d0
 
-    props(1) = Chi_xyyx_k(1,1)
-    props(2) = Chi_xyyx_k(1,2)
-    props(3) = Chi_xyyx_k(2,1)
-    props(4) = Chi_xyyx_k(2,2)
+    props(1) = Chi_xyyx_k(1,1)* (Echarge/Hartree2J * mu_B) / (Ang2Bohr)**3
+    props(2) = Chi_xyyx_k(1,2)* (Echarge/Hartree2J * mu_B) / (Ang2Bohr)**3
+    props(3) = Chi_xyyx_k(2,1)* (Echarge/Hartree2J * mu_B) / (Ang2Bohr)**3
+    props(4) = Chi_xyyx_k(2,2)* (Echarge/Hartree2J * mu_B) / (Ang2Bohr)**3
     props(5) = M_L_k(1)
     props(6) = M_L_k(2)
-
-
-    props = props * (Echarge/Hartree2J * mu_B) / (Ang2Bohr)**3
 
 end subroutine
 

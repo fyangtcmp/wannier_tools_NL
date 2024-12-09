@@ -286,37 +286,12 @@ subroutine ham_bulk_latticegauge(k,Hamk_bulk)
 
       UU=Hamk_bulk
       call eigensystem_c( 'V', 'U', Num_wann, UU, W)
-      call velocity_latticegauge_simple(k, UU, velocities)
+      call dHdk_latticegauge_Ham(k, W, UU, velocities)
       call add_zeeman_orb(UU, W, velocities)
 
    endif
    return
 end subroutine ham_bulk_latticegauge
-
-subroutine velocity_latticegauge_simple(k_in, UU, velocities) !> dH_dk, without 1/hbar
-   use para, only: dp, Num_wann
-   implicit none
-
-   real(dp),    intent(in)  :: k_in(3)
-   complex(dp), intent(in)  :: UU(Num_wann, Num_wann)
-   complex(dp), intent(out) :: velocities(Num_wann, Num_wann, 3)
-
-   complex(dp), allocatable :: Amat(:, :), UU_dag(:,:)
-   allocate( Amat(Num_wann, Num_wann), UU_dag(Num_wann, Num_wann))
-
-   velocities= 0d0
-   call dHdk_latticegauge_wann(k_in, velocities)
-
-   UU_dag= conjg(transpose(UU))
-   !> unitility rotate velocity
-   call mat_mul(Num_wann, velocities(:,:,1), UU, Amat)
-   call mat_mul(Num_wann, UU_dag, Amat, velocities(:,:,1))
-   call mat_mul(Num_wann, velocities(:,:,2), UU, Amat)
-   call mat_mul(Num_wann, UU_dag, Amat, velocities(:,:,2))
-   call mat_mul(Num_wann, velocities(:,:,3), UU, Amat)
-   call mat_mul(Num_wann, UU_dag, Amat, velocities(:,:,3))
-
-end subroutine velocity_latticegauge_simple
 
 
 subroutine dHdk_latticegauge_wann(k, velocity_Wannier)
